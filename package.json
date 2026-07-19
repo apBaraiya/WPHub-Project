@@ -1,0 +1,30 @@
+{
+  "name": "wphub-saas",
+  "private": true,
+  "version": "1.0.0",
+  "description": "WPHub SaaS - Production-Ready Cloud WordPress Hosting Platform",
+  "scripts": {
+    "dev": "pnpm --filter \"@wphub/backend\" --filter \"@wphub/frontend\" --parallel dev",
+    "build": "pnpm -r build",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "prepare": "husky",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/supertest": "^7.2.0",
+    "@typescript-eslint/eslint-plugin": "^7.1.0",
+    "@typescript-eslint/parser": "^7.1.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2",
+    "prettier": "^3.2.5",
+    "supertest": "^7.2.2",
+    "typescript": "^5.3.3",
+    "vitest": "^1.6.1"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@wphub/tsconfig",
+  "version": "1.0.0",
+  "private": true,
+  "files": [
+    "tsconfig.base.json",
+    "tsconfig.node.json",
+    "tsconfig.react.json"
+  ]
+}
