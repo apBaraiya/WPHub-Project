@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import https from 'https';
 import { exec } from 'child_process';
 import util from 'util';
 import { prisma, isDbOffline } from '../repositories/prisma';
@@ -8,6 +7,7 @@ import { inMemoryDb, saveInMemoryDb } from '../repositories/inMemoryDb';
 import { logger } from '@wphub/utils';
 import { runtimeManager } from './runtimeManager';
 import { installerRegistry } from './cmsInstallers';
+import { cmsPackageManager } from './cmsPackageManager';
 
 const execPromise = util.promisify(exec);
 
@@ -33,35 +33,7 @@ export interface InstallConfig {
   dbPrefix: string;
 }
 
-async function downloadFile(url: string, dest: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
-    https
-      .get(url, (response) => {
-        if (
-          response.statusCode &&
-          response.statusCode >= 300 &&
-          response.statusCode < 400 &&
-          response.headers.location
-        ) {
-          file.close();
-          fs.unlink(dest, () => {});
-          downloadFile(response.headers.location, dest).then(resolve).catch(reject);
-          return;
-        }
-        response.pipe(file);
-        file.on('finish', () => {
-          file.close();
-          resolve();
-        });
-      })
-      .on('error', (err) => {
-        file.close();
-        fs.unlink(dest, () => {});
-        reject(err);
-      });
-  });
-}
+
 
 // Progress listener registry (SSE)
 const progressMap = new Map<string, (step: string, progress: number) => void>();
@@ -109,69 +81,43 @@ export const installerEngine = {
       await fs.promises.mkdir(CACHE_DIR, { recursive: true });
       await fs.promises.mkdir(webRoot, { recursive: true });
 
-      const appSlug = appName.toLowerCase();
-      const zipName = `${appSlug}-${appVersion}.zip`;
-      const cachedZipPath = path.join(CACHE_DIR, zipName);
-      const downloadUrl = installer.getDownloadUrl(appVersion);
-
-      let isDownloaded = false;
-
-      // 2. Download official package archive
-      if (downloadUrl) {
-        notify('Downloading...', 30);
-        try {
-          // Delete corrupted/empty package from cache
-          if (fs.existsSync(cachedZipPath) && fs.statSync(cachedZipPath).size < 100000) {
-            try {
-              fs.unlinkSync(cachedZipPath);
-            } catch (e) {
-              /* ignore */
-            }
-          }
-          if (!fs.existsSync(cachedZipPath)) {
-            await downloadFile(downloadUrl, cachedZipPath);
-          }
-          isDownloaded = true;
-        } catch (downloadErr: any) {
-          logger.warn(`Failed downloading package: ${downloadErr.message}`);
-          throw new Error(`Failed to download installation archive: ${downloadErr.message}`);
-        }
-      }
+      notify('Downloading...', 30);
+      const pkg = await cmsPackageManager.acquirePackage(appName, {
+        version: appVersion,
+        maxRetries: 3,
+        resumeIfPartial: true,
+      });
 
       // 3. Extract files
-      if (isDownloaded && fs.existsSync(cachedZipPath)) {
-        notify('Extracting...', 55);
-        try {
-          const tempExtract = path.join(sitePath, `temp_extract_${Date.now()}`);
-          await fs.promises.mkdir(tempExtract, { recursive: true });
+      notify('Extracting...', 55);
+      try {
+        const tempExtract = path.join(sitePath, `temp_extract_${Date.now()}`);
+        await fs.promises.mkdir(tempExtract, { recursive: true });
 
-          const command =
-            process.platform === 'win32'
-              ? `powershell -Command "Expand-Archive -Path '${cachedZipPath}' -DestinationPath '${tempExtract}' -Force"`
-              : `unzip -o "${cachedZipPath}" -d "${tempExtract}"`;
+        const command =
+          process.platform === 'win32'
+            ? `powershell -Command "Expand-Archive -Path '${pkg.localPath}' -DestinationPath '${tempExtract}' -Force"`
+            : `unzip -o "${pkg.localPath}" -d "${tempExtract}"`;
 
-          await execPromise(command);
+        await execPromise(command);
 
-          // Copy files recursively
-          const contentItems = await fs.promises.readdir(tempExtract);
-          if (
-            contentItems.length === 1 &&
-            fs.statSync(path.join(tempExtract, contentItems[0])).isDirectory()
-          ) {
-            const nestedDir = path.join(tempExtract, contentItems[0]);
-            await fs.promises.cp(nestedDir, webRoot, { recursive: true, force: true });
-          } else {
-            await fs.promises.cp(tempExtract, webRoot, { recursive: true, force: true });
-          }
-
-          // Cleanup temp folder
-          await fs.promises.rm(tempExtract, { recursive: true, force: true });
-        } catch (extractErr: any) {
-          logger.error(`Native extraction failed: ${extractErr.message}`);
-          throw new Error(`Extraction failed: ${extractErr.message}`);
+        // Copy files recursively
+        const contentItems = await fs.promises.readdir(tempExtract);
+        if (
+          contentItems.length === 1 &&
+          fs.statSync(path.join(tempExtract, contentItems[0])).isDirectory()
+        ) {
+          const nestedDir = path.join(tempExtract, contentItems[0]);
+          await fs.promises.cp(nestedDir, webRoot, { recursive: true, force: true });
+        } else {
+          await fs.promises.cp(tempExtract, webRoot, { recursive: true, force: true });
         }
-      } else {
-        throw new Error('No downloaded package found to extract.');
+
+        // Cleanup temp folder
+        await fs.promises.rm(tempExtract, { recursive: true, force: true });
+      } catch (extractErr: any) {
+        logger.error(`Native extraction failed: ${extractErr.message}`);
+        throw new Error(`Extraction failed: ${extractErr.message}`);
       }
 
       // 4. Run Pre-Install Hook
