@@ -8,13 +8,9 @@ import { logger } from '@wphub/utils';
 import { runtimeManager } from './runtimeManager';
 import { installerRegistry } from './cmsInstallers';
 import { cmsPackageManager } from './cmsPackageManager';
+import { siteProvisioner } from './siteProvisioner';
 
 const execPromise = util.promisify(exec);
-
-// Absolute folders definitions
-const WORKSPACE_ROOT = path.resolve(process.cwd());
-const SITES_DIR = path.join(WORKSPACE_ROOT, 'sites');
-const CACHE_DIR = path.join(WORKSPACE_ROOT, 'cache');
 
 // Setup category catalog configuration
 export interface InstallConfig {
@@ -58,29 +54,24 @@ export const installerEngine = {
 
     // 1. Resolve Installer Module
     const installer = installerRegistry.get(appName);
-    const sitePath = path.join(SITES_DIR, siteId);
-    
-    // Resolve webRoot dynamically relative to the custom documentRoot
-    const webRoot = installer.documentRoot 
-      ? (directory 
-        ? path.join(sitePath, installer.documentRoot, directory) 
-        : path.join(sitePath, installer.documentRoot))
-      : (directory 
-        ? path.join(sitePath, directory) 
-        : sitePath);
 
-    const dbName = cfg.dbName || `${appName.toLowerCase()}_db`;
-    const dbUser = `${appName.toLowerCase()}_user`;
-    const dbPass = 'SecurePassword1!';
-
+    // Call siteProvisioner to provision database, directory tree, php.ini, ports
+    let provisioned;
     try {
       notify('Preparing...', 10);
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      provisioned = await siteProvisioner.provision(siteId, cfg.domain, {
+        documentRoot: installer.documentRoot,
+        directory,
+      });
+    } catch (provisionErr: any) {
+      logger.error(`Site provisioning failed: ${provisionErr.message}`);
+      notify('Failed', 0);
+      return;
+    }
 
-      // Create base directories
-      await fs.promises.mkdir(CACHE_DIR, { recursive: true });
-      await fs.promises.mkdir(webRoot, { recursive: true });
+    const { sitePath, webRoot, dbName, dbUser, dbPass, port } = provisioned;
 
+    try {
       notify('Downloading...', 30);
       const pkg = await cmsPackageManager.acquirePackage(appName, {
         version: appVersion,
@@ -123,20 +114,7 @@ export const installerEngine = {
       // 4. Run Pre-Install Hook
       await installer.preInstall(siteId, sitePath, webRoot, cfg);
 
-      // 5. Create real Database and User on MariaDB
-      notify('Creating Database...', 75);
-      try {
-        await runtimeManager.runMariaDBQuery(`CREATE DATABASE IF NOT EXISTS \`${dbName}\`;`);
-        await runtimeManager.runMariaDBQuery(`CREATE USER IF NOT EXISTS '${dbUser}'@'127.0.0.1' IDENTIFIED BY '${dbPass}';`);
-        await runtimeManager.runMariaDBQuery(`GRANT ALL PRIVILEGES ON \`${dbName}\`.* TO '${dbUser}'@'127.0.0.1';`);
-        await runtimeManager.runMariaDBQuery(`FLUSH PRIVILEGES;`);
-        logger.info(`Real MariaDB database and user created for site installation: ${dbName}`);
-      } catch (dbErr: any) {
-        logger.error(`Failed creating real database for installation: ${dbErr.message}`);
-        throw new Error(`Database provisioning failed: ${dbErr.message}`);
-      }
-
-      // 6. Generate configuration files
+      // 5. Generate configuration files
       notify('Writing Config...', 85);
       const dbConfig = {
         dbName,
@@ -150,12 +128,9 @@ export const installerEngine = {
 
       notify('Finalizing...', 95);
 
-      // 7. Start PHP server pointing to webRoot (the custom documentRoot)
-      let sitePort = 8080;
+      // 6. Start PHP server and trigger CMS-specific installer logic
+      const sitePort = port;
       if (runtimeManager.isReady()) {
-        sitePort = await runtimeManager.startPhpServer(siteId, webRoot);
-        
-        // Execute dynamic installation trigger
         try {
           await installer.install(webRoot, cfg);
           
@@ -166,33 +141,12 @@ export const installerEngine = {
           }
           logger.info('CMS installation and authentication verified successfully.');
         } catch (setupErr: any) {
-          logger.error(`Installation verification failed: ${setupErr.message}. Triggering rollback...`);
+          logger.error(`Installation verification failed: ${setupErr.message}. Triggering deprovisioning rollback...`);
           
-          // Stop loopback PHP server first to release file lock descriptors on Windows
-          try {
-            runtimeManager.stopPhpServer(siteId);
-          } catch (e: any) {
-            logger.warn(`Failed stopping PHP server during rollback: ${e.message}`);
-          }
+          await siteProvisioner.deprovision(siteId, dbName, dbUser).catch((e) => {
+            logger.error(`Deprovisioning failed during rollback: ${e.message}`);
+          });
 
-          // Run installer-specific cleanup
-          await installer.cleanup(webRoot, cfg).catch(() => {});
-
-          // Rollback database, user and files
-          try {
-            await runtimeManager.runMariaDBQuery(`DROP DATABASE IF EXISTS \`${dbName}\`;`);
-            if (dbUser !== 'root') {
-              await runtimeManager.runMariaDBQuery(`DROP USER IF EXISTS '${dbUser}'@'127.0.0.1';`);
-            }
-          } catch (e: any) {
-            logger.warn(`Failed database drop during rollback: ${e.message}`);
-          }
-          try {
-            await fs.promises.rm(sitePath, { recursive: true, force: true });
-          } catch (e: any) {
-            logger.warn(`Failed directory removal during rollback: ${e.message}`);
-          }
-          
           throw new Error(`CMS automatic setup failed: ${setupErr.message}`);
         }
       }

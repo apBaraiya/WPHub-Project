@@ -205,7 +205,15 @@ export const runtimeManager = {
 
     // Spawn server process using the central PHP router script to prevent 404s on subpages/rewrites
     const routerPath = path.join(RUNTIMES_DIR, 'php-router.php');
-    const proc = spawn(phpCommandPath, ['-S', `127.0.0.1:${port}`, '-t', webRoot, routerPath], {
+    const customIniPath = path.join(WORKSPACE_ROOT, 'sites', siteId, 'config', 'php.ini');
+    
+    const args = ['-S', `127.0.0.1:${port}`, '-t', webRoot];
+    if (fs.existsSync(customIniPath)) {
+      args.push('-c', customIniPath);
+    }
+    args.push(routerPath);
+
+    const proc = spawn(phpCommandPath, args, {
       stdio: 'pipe',
       detached: false,
     });
