@@ -161,38 +161,45 @@ async function generateAppFilesFallback(app: string, destPath: string) {
   }
 }
 
-async function triggerWordPressSetupScript(port: number, cfg: InstallConfig): Promise<void> {
-  return new Promise((resolve, reject) => {
-    // 1. Wait a moment for server initialization
-    setTimeout(() => {
-      const postData = `weblog_title=${encodeURIComponent(cfg.siteName)}&user_name=${encodeURIComponent(cfg.adminUser)}&admin_email=${encodeURIComponent(cfg.adminEmail)}&pass1=${encodeURIComponent(cfg.adminPass)}&pass2=${encodeURIComponent(cfg.adminPass)}&pw_weak=1&blog_public=1`;
+async function runWordPressInstallAPI(webRoot: string, cfg: InstallConfig): Promise<void> {
+  const phpExe = runtimeManager.getPhpCommand();
+  const scriptPath = path.join(webRoot, 'wp-auto-install.php');
+  
+  const scriptContent = `<?php
+define( 'WP_INSTALLING', true );
+require_once __DIR__ . '/wp-load.php';
+require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
-      const options = {
-        hostname: '127.0.0.1',
-        port: port,
-        path: '/wp-admin/install.php?step=2',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Content-Length': Buffer.byteLength(postData),
-        },
-      };
+$title = $argv[1] ?? 'My WordPress';
+$user = $argv[2] ?? 'admin';
+$email = $argv[3] ?? 'admin@example.com';
+$password = $argv[4] ?? 'password';
 
-      const req = http.request(options, (res) => {
-        res.on('data', () => {});
-        res.on('end', () => {
-          resolve();
-        });
-      });
+$result = wp_install( $title, $user, $email, true, '', $password, 'en_US' );
+echo "INSTALL_SUCCESS";
+`;
 
-      req.on('error', (err) => {
-        reject(err);
-      });
+  await fs.promises.writeFile(scriptPath, scriptContent, 'utf8');
 
-      req.write(postData);
-      req.end();
-    }, 1800);
-  });
+  // Command to run the install script
+  const titleEsc = cfg.siteName.replace(/"/g, '\\"');
+  const userEsc = cfg.adminUser.replace(/"/g, '\\"');
+  const emailEsc = cfg.adminEmail.replace(/"/g, '\\"');
+  const passEsc = cfg.adminPass.replace(/"/g, '\\"');
+  
+  const cmd = `"${phpExe}" "${scriptPath}" "${titleEsc}" "${userEsc}" "${emailEsc}" "${passEsc}"`;
+  
+  try {
+    const { stdout, stderr } = await execPromise(cmd, { cwd: webRoot });
+    await fs.promises.unlink(scriptPath).catch(() => {});
+    
+    if (!stdout.includes('INSTALL_SUCCESS')) {
+      throw new Error(`Execution returned: ${stdout}. Stderr: ${stderr}`);
+    }
+  } catch (err: any) {
+    await fs.promises.unlink(scriptPath).catch(() => {});
+    throw err;
+  }
 }
 
 async function verifyWordPressInstallation(dbName: string, prefix: string): Promise<boolean> {
@@ -468,8 +475,8 @@ class JConfig {
         // Execute automatic installer trigger for WordPress
         if (appSlug === 'wordpress') {
           try {
-            logger.info(`Triggering automatic WordPress installer script on port ${sitePort}...`);
-            await triggerWordPressSetupScript(sitePort, cfg);
+            logger.info(`Triggering automatic WordPress installer API...`);
+            await runWordPressInstallAPI(webRoot, cfg);
             
             // Verify if tables were successfully created in the real database
             const verified = await verifyWordPressInstallation(dbName, cfg.dbPrefix || 'wp_');
@@ -486,6 +493,13 @@ class JConfig {
           } catch (wpSetupErr: any) {
             logger.error(`WordPress installation verification failed: ${wpSetupErr.message}. Triggering rollback...`);
             
+            // Stop loopback PHP server first to release file lock descriptors on Windows
+            try {
+              runtimeManager.stopPhpServer(siteId);
+            } catch (e: any) {
+              logger.warn(`Failed stopping PHP server during rollback: ${e.message}`);
+            }
+
             // Rollback database, user and files
             try {
               await runtimeManager.runMariaDBQuery(`DROP DATABASE IF EXISTS \`${dbName}\`;`);
