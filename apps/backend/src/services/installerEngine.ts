@@ -212,6 +212,43 @@ async function verifyWordPressInstallation(dbName: string, prefix: string): Prom
   return false;
 }
 
+async function verifyWordPressLogin(port: number, cfg: InstallConfig): Promise<boolean> {
+  logger.info(`Performing login verification for user: ${cfg.adminUser} on port ${port}...`);
+  return new Promise((resolve) => {
+    const postData = `log=${encodeURIComponent(cfg.adminUser)}&pwd=${encodeURIComponent(cfg.adminPass)}&wp-submit=Log+In`;
+    
+    const options = {
+      hostname: '127.0.0.1',
+      port: port,
+      path: '/wp-login.php',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(postData),
+      },
+    };
+
+    const req = http.request(options, (res) => {
+      // Success redirects to wp-admin/ (302) or sets wordpress cookies
+      if (res.statusCode === 302 || (res.headers.location && res.headers.location.includes('wp-admin'))) {
+        logger.info('WordPress admin login health check verified successfully (HTTP 302 Redirect).');
+        resolve(true);
+      } else {
+        logger.warn(`WordPress admin login health check failed with status: ${res.statusCode}`);
+        resolve(false);
+      }
+    });
+
+    req.on('error', (err) => {
+      logger.error(`WordPress login health check request error: ${err.message}`);
+      resolve(false);
+    });
+
+    req.write(postData);
+    req.end();
+  });
+}
+
 // Progress listener registry (SSE)
 const progressMap = new Map<string, (step: string, progress: number) => void>();
 
@@ -440,6 +477,12 @@ class JConfig {
               throw new Error('Database tables were not created successfully by WordPress installer script.');
             }
             logger.info('WordPress installation verified successfully.');
+
+            // Verify admin authentication login
+            const authenticated = await verifyWordPressLogin(sitePort, cfg);
+            if (!authenticated) {
+              throw new Error('Authentication health check failed. The created admin credentials could not authenticate.');
+            }
           } catch (wpSetupErr: any) {
             logger.error(`WordPress installation verification failed: ${wpSetupErr.message}. Triggering rollback...`);
             
