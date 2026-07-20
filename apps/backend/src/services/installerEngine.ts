@@ -165,7 +165,7 @@ async function triggerWordPressSetupScript(port: number, cfg: InstallConfig): Pr
   return new Promise((resolve, reject) => {
     // 1. Wait a moment for server initialization
     setTimeout(() => {
-      const postData = `weblog_title=${encodeURIComponent(cfg.siteName)}&user_name=${encodeURIComponent(cfg.adminUser)}&admin_email=${encodeURIComponent(cfg.adminEmail)}&pass1=${encodeURIComponent(cfg.adminPass)}&pass2=${encodeURIComponent(cfg.adminPass)}&blog_public=1`;
+      const postData = `weblog_title=${encodeURIComponent(cfg.siteName)}&user_name=${encodeURIComponent(cfg.adminUser)}&admin_email=${encodeURIComponent(cfg.adminEmail)}&pass1=${encodeURIComponent(cfg.adminPass)}&pass2=${encodeURIComponent(cfg.adminPass)}&pw_weak=1&blog_public=1`;
 
       const options = {
         hostname: '127.0.0.1',
