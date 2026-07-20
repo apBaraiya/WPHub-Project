@@ -203,10 +203,19 @@ export const runtimeManager = {
     // Create site webroot if not exists
     await fs.promises.mkdir(webRoot, { recursive: true });
 
-    // Spawn server process
-    const proc = spawn(phpCommandPath, ['-S', `127.0.0.1:${port}`, '-t', webRoot], {
-      stdio: 'ignore',
+    // Spawn server process using the central PHP router script to prevent 404s on subpages/rewrites
+    const routerPath = path.join(RUNTIMES_DIR, 'php-router.php');
+    const proc = spawn(phpCommandPath, ['-S', `127.0.0.1:${port}`, '-t', webRoot, routerPath], {
+      stdio: 'pipe',
       detached: false,
+    });
+
+    proc.stdout.on('data', (data) => {
+      logger.info(`[PHP Server ${siteId}]: ${data.toString().trim()}`);
+    });
+
+    proc.stderr.on('data', (data) => {
+      logger.warn(`[PHP Server ${siteId} Error]: ${data.toString().trim()}`);
     });
 
     proc.on('error', (err) => {
@@ -555,6 +564,37 @@ export const runtimeManager = {
       await this.ensurePHPRuntime();
     } catch (e: any) {
       logger.error(`Failed ensuring PHP: ${e.message}`);
+    }
+
+    // Write central php-router.php script dynamically to prevent subpage 404s in built-in PHP dev server
+    try {
+      const routerScriptPath = path.join(RUNTIMES_DIR, 'php-router.php');
+      const routerContent = `<?php
+$root = $_SERVER['DOCUMENT_ROOT'];
+chdir($root);
+$path = '/' . ltrim(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), '/');
+
+if (file_exists($root . $path)) {
+    if (is_dir($root . $path)) {
+        $index = rtrim($root . $path, '/') . '/index.php';
+        if (file_exists($index)) {
+            include $index;
+            return;
+        }
+    }
+    return false;
+}
+if (file_exists('index.php')) {
+    include 'index.php';
+} else {
+    return false;
+}
+`;
+      await fs.promises.mkdir(RUNTIMES_DIR, { recursive: true });
+      await fs.promises.writeFile(routerScriptPath, routerContent, 'utf8');
+      logger.info('Successfully generated central php-router.php script.');
+    } catch (err: any) {
+      logger.error(`Failed generating php-router.php: ${err.message}`);
     }
 
     this.ensureMariaDBRuntime().catch((e) => {
