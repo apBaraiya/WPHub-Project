@@ -143,6 +143,13 @@ export const installerEngine = {
         } catch (setupErr: any) {
           logger.error(`Installation verification failed: ${setupErr.message}. Triggering deprovisioning rollback...`);
           
+          if (installer.onRollback) {
+            await installer.onRollback(webRoot, cfg, setupErr).catch((e) => {
+              logger.error(`Module rollback failed: ${e.message}`);
+            });
+          }
+          await installer.cleanup(webRoot, cfg).catch(() => {});
+
           await siteProvisioner.deprovision(siteId, dbName, dbUser).catch((e) => {
             logger.error(`Deprovisioning failed during rollback: ${e.message}`);
           });

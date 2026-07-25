@@ -28,9 +28,10 @@ export interface CMSInstaller {
   install(webRoot: string, config: InstallConfig): Promise<void>;
   verify(port: number, webRoot: string, config: InstallConfig): Promise<boolean>;
   cleanup(webRoot: string, config: InstallConfig): Promise<void>;
+  onRollback?(webRoot: string, config: InstallConfig, error: Error): Promise<void>;
 }
 
-// 1. WordPress Installer Plugin
+// 1. WordPress Installer Plugin Module
 export class WordPressInstaller implements CMSInstaller {
   slug = 'wordpress';
   displayName = 'WordPress';
@@ -186,7 +187,7 @@ echo "INSTALL_SUCCESS";
   async cleanup(_webRoot: string, _config: InstallConfig): Promise<void> {}
 }
 
-// 2. Laravel Installer Plugin
+// 2. Laravel Installer Plugin Module
 export class LaravelInstaller implements CMSInstaller {
   slug = 'laravel';
   displayName = 'Laravel';
@@ -224,7 +225,7 @@ DB_PASSWORD=${db.dbPass}
   async cleanup(_webRoot: string, _config: InstallConfig): Promise<void> {}
 }
 
-// 3. Joomla Installer Plugin
+// 3. Joomla Installer Plugin Module
 export class JoomlaInstaller implements CMSInstaller {
   slug = 'joomla';
   displayName = 'Joomla';
@@ -260,7 +261,7 @@ class JConfig {
   async cleanup(_webRoot: string, _config: InstallConfig): Promise<void> {}
 }
 
-// 4. Drupal Installer Plugin
+// 4. Drupal Installer Plugin Module
 export class DrupalInstaller implements CMSInstaller {
   slug = 'drupal';
   displayName = 'Drupal';
@@ -283,7 +284,7 @@ export class DrupalInstaller implements CMSInstaller {
   async cleanup(_webRoot: string, _config: InstallConfig): Promise<void> {}
 }
 
-// 5. Ghost Installer Plugin
+// 5. Ghost Installer Plugin Module
 export class GhostInstaller implements CMSInstaller {
   slug = 'ghost';
   displayName = 'Ghost';
@@ -326,7 +327,30 @@ export class GhostInstaller implements CMSInstaller {
   async cleanup(_webRoot: string, _config: InstallConfig): Promise<void> {}
 }
 
-// 6. Generic Fallback Installer
+// 6. Magento Installer Plugin Module
+export class MagentoInstaller implements CMSInstaller {
+  slug = 'magento';
+  displayName = 'Magento';
+  documentRoot = '';
+
+  getDownloadUrl(_version: string): string {
+    return 'https://github.com/magento/magento2/archive/refs/tags/2.4.6.zip';
+  }
+
+  async preInstall(_siteId: string, _sitePath: string, _webRoot: string, _config: InstallConfig): Promise<void> {}
+
+  async configure(_webRoot: string, _config: InstallConfig, _db: DatabaseConfig): Promise<void> {}
+
+  async install(_webRoot: string, _config: InstallConfig): Promise<void> {}
+
+  async verify(_port: number, _webRoot: string, _config: InstallConfig): Promise<boolean> {
+    return true;
+  }
+
+  async cleanup(_webRoot: string, _config: InstallConfig): Promise<void> {}
+}
+
+// 7. Generic Fallback Installer Module
 export class GenericCMSInstaller implements CMSInstaller {
   slug = 'generic';
   displayName = 'Generic CMS';
@@ -358,7 +382,7 @@ export class GenericCMSInstaller implements CMSInstaller {
   async cleanup(_webRoot: string, _config: InstallConfig): Promise<void> {}
 }
 
-// 7. Installer Module Registry
+// 8. Installer Module Registry
 class InstallerRegistry {
   private installers = new Map<string, CMSInstaller>();
 
@@ -368,6 +392,7 @@ class InstallerRegistry {
     this.register(new JoomlaInstaller());
     this.register(new DrupalInstaller());
     this.register(new GhostInstaller());
+    this.register(new MagentoInstaller());
   }
 
   register(installer: CMSInstaller) {
