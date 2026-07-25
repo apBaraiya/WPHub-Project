@@ -26,7 +26,8 @@ export interface InstallConfig {
   adminUser: string;
   adminPass: string;
   adminEmail: string;
-  dbName: string;
+  dbName?: string;
+  dbUser?: string;
   dbPrefix: string;
 }
 
@@ -71,6 +72,8 @@ export const installerEngine = {
     }
 
     const { sitePath, webRoot, dbName, dbUser, dbPass, port } = provisioned;
+    cfg.dbName = dbName;
+    cfg.dbUser = dbUser;
 
     try {
       notify('Downloading...', 30);
