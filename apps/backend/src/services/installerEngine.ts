@@ -9,6 +9,7 @@ import { runtimeManager } from './runtimeManager';
 import { installerRegistry } from './cmsInstallers';
 import { cmsPackageManager } from './cmsPackageManager';
 import { siteProvisioner } from './siteProvisioner';
+import { cmsVerificationEngine } from './cmsVerificationEngine';
 
 const execPromise = util.promisify(exec);
 
@@ -134,12 +135,28 @@ export const installerEngine = {
         try {
           await installer.install(webRoot, cfg);
           
-          // Verify site installation and credentials login
+          // Verify site installation using 12-point verification suite
           const verified = await installer.verify(sitePort, webRoot, cfg);
           if (!verified) {
-            throw new Error('Installation verification or login check failed.');
+            throw new Error('Installation module verification check failed.');
           }
-          logger.info('CMS installation and authentication verified successfully.');
+
+          const report = await cmsVerificationEngine.verifyWithRetryAndRollback(
+            siteId,
+            appName,
+            webRoot,
+            sitePort,
+            dbName,
+            dbUser,
+            cfg.adminUser,
+            cfg.adminPass,
+            { maxRetries: 3, autoRollbackOnFailure: true }
+          );
+
+          if (!report.overallPassed) {
+            throw new Error(`12-point health check suite failed (${report.failedChecks} checks failed).`);
+          }
+          logger.info('CMS 12-point verification suite passed successfully.');
         } catch (setupErr: any) {
           logger.error(`Installation verification failed: ${setupErr.message}. Triggering deprovisioning rollback...`);
           
