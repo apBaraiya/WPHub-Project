@@ -1,0 +1,9 @@
+{
+  "id": "joomla",
+  "displayName": "Joomla CMS",
+  "version": "5.0.3",
+  "documentRoot": "public_html",
+  "defaultPackageUrl": "https://github.com/joomla/joomla-cms/releases/download/5.0.3/Joomla_5.0.3-Stable-Full_Package.zip",
+  "detectionMarkers": ["configuration.php", "administrator/manifests"],
+  "main": "index.ts"
+}

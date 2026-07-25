@@ -1,0 +1,9 @@
+{
+  "id": "laravel",
+  "displayName": "Laravel Framework",
+  "version": "10.x",
+  "documentRoot": "public",
+  "defaultPackageUrl": "https://github.com/laravel/laravel/archive/refs/heads/10.x.zip",
+  "detectionMarkers": ["artisan", "bootstrap/app.php"],
+  "main": "index.ts"
+}

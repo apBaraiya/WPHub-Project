@@ -6,6 +6,7 @@ import { exec } from 'child_process';
 import { logger } from '@wphub/utils';
 import { runtimeManager } from './runtimeManager';
 import { InstallConfig } from './installerEngine';
+import { cmsPluginLoader } from '../installers/pluginLoader';
 
 const execPromise = util.promisify(exec);
 
@@ -393,6 +394,11 @@ class InstallerRegistry {
     this.register(new DrupalInstaller());
     this.register(new GhostInstaller());
     this.register(new MagentoInstaller());
+    
+    // Discover external dropped-in installer modules asynchronously
+    cmsPluginLoader.discoverAndLoadModules().catch((err) => {
+      logger.error(`Dynamic CMS module discovery error: ${err.message}`);
+    });
   }
 
   register(installer: CMSInstaller) {
@@ -404,6 +410,53 @@ class InstallerRegistry {
     if (this.installers.has(normSlug)) {
       return this.installers.get(normSlug)!;
     }
+    
+    // Check dynamic plugin loader for dropped-in modules
+    try {
+      const plugin = cmsPluginLoader.getModule(normSlug);
+      if (plugin && plugin.manifest) {
+        return {
+          slug: plugin.manifest.id,
+          displayName: plugin.manifest.displayName,
+          documentRoot: plugin.manifest.documentRoot,
+          getDownloadUrl: (_ver: string) => plugin.manifest.defaultPackageUrl,
+          preInstall: async (siteId, sitePath, webRoot, config) => {
+            if (plugin.preInstall) {
+              await plugin.preInstall({ siteId, domain: config.domain, sitePath, webRoot, dbConfig: { dbName: '', dbUser: '', dbPass: '', dbHost: '', dbPort: 3306 }, config });
+            }
+          },
+          configure: async (webRoot, config, dbConfig) => {
+            if (plugin.generateConfig) {
+              await plugin.generateConfig({ siteId: config.siteId, domain: config.domain, sitePath: webRoot, webRoot, dbConfig, config });
+            }
+          },
+          install: async (webRoot, config) => {
+            if (plugin.executeInstall) {
+              await plugin.executeInstall({ siteId: config.siteId, domain: config.domain, sitePath: webRoot, webRoot, dbConfig: { dbName: '', dbUser: '', dbPass: '', dbHost: '', dbPort: 3306 }, config });
+            }
+          },
+          verify: async (_port, webRoot, config) => {
+            if (plugin.verifyInstall) {
+              return await plugin.verifyInstall({ siteId: config.siteId, domain: config.domain, sitePath: webRoot, webRoot, dbConfig: { dbName: '', dbUser: '', dbPass: '', dbHost: '', dbPort: 3306 }, config });
+            }
+            return true;
+          },
+          cleanup: async (webRoot, config) => {
+            if (plugin.cleanup) {
+              await plugin.cleanup({ siteId: config.siteId, domain: config.domain, sitePath: webRoot, webRoot, dbConfig: { dbName: '', dbUser: '', dbPass: '', dbHost: '', dbPort: 3306 }, config });
+            }
+          },
+          onRollback: async (webRoot, config, err) => {
+            if (plugin.onRollback) {
+              await plugin.onRollback({ siteId: config.siteId, domain: config.domain, sitePath: webRoot, webRoot, dbConfig: { dbName: '', dbUser: '', dbPass: '', dbHost: '', dbPort: 3306 }, config }, err);
+            }
+          },
+        };
+      }
+    } catch (_err) {
+      // ignore
+    }
+
     return new GenericCMSInstaller(normSlug);
   }
 }

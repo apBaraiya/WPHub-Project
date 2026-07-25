@@ -1,0 +1,9 @@
+{
+  "id": "drupal",
+  "displayName": "Drupal CMS",
+  "version": "latest",
+  "documentRoot": "web",
+  "defaultPackageUrl": "https://www.drupal.org/download-latest/zip",
+  "detectionMarkers": ["web/sites", "core/lib/Drupal.php"],
+  "main": "index.ts"
+}

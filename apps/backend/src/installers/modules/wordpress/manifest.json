@@ -1,0 +1,10 @@
+{
+  "id": "wordpress",
+  "displayName": "WordPress CMS",
+  "version": "6.4.3",
+  "documentRoot": "public_html",
+  "defaultPackageUrl": "https://wordpress.org/latest.zip",
+  "detectionMarkers": ["wp-config.php", "wp-load.php"],
+  "requiredExtensions": ["mysqli", "gd", "curl", "zip", "xml"],
+  "main": "index.ts"
+}

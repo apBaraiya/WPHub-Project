@@ -1,0 +1,9 @@
+{
+  "id": "ghost",
+  "displayName": "Ghost Publishing",
+  "version": "5.75.0",
+  "documentRoot": "",
+  "defaultPackageUrl": "https://github.com/TryGhost/Ghost/archive/refs/tags/v5.75.0.zip",
+  "detectionMarkers": ["config.production.json", "ghost-cli.json"],
+  "main": "index.ts"
+}

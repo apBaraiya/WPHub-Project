@@ -1,0 +1,19 @@
+import { CMSModulePlugin, InstallContext } from '../../pluginLoader';
+
+const prestashopPlugin: CMSModulePlugin = {
+  manifest: {
+    id: 'prestashop',
+    displayName: 'PrestaShop eCommerce',
+    version: '8.1.3',
+    documentRoot: '',
+    defaultPackageUrl: 'https://github.com/PrestaShop/PrestaShop/releases/download/8.1.3/prestashop_8.1.3.zip',
+    detectionMarkers: ['config/config.inc.php'],
+    main: 'index.ts',
+  },
+
+  async verifyInstall(_ctx: InstallContext): Promise<boolean> {
+    return true;
+  },
+};
+
+export default prestashopPlugin;
