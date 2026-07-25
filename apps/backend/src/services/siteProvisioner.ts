@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { logger } from '@wphub/utils';
 import { runtimeManager } from './runtimeManager';
+import { siteResolver } from './siteResolver';
 
 const WORKSPACE_ROOT = path.resolve(process.cwd());
 const SITES_DIR = path.join(WORKSPACE_ROOT, 'sites');
@@ -44,10 +45,11 @@ export const siteProvisioner = {
     }
 
     // Resolve webRoot based on dynamic document root configuration
+    const resolvedLoc = siteResolver.resolveSiteLocation(siteId, '', installerConfig.directory);
     let webRoot = installerConfig.documentRoot 
       ? path.join(sitePath, installerConfig.documentRoot)
-      : sitePath;
-    if (installerConfig.directory) {
+      : resolvedLoc.webRoot;
+    if (installerConfig.directory && !webRoot.endsWith(installerConfig.directory)) {
       webRoot = path.join(webRoot, installerConfig.directory);
     }
     await fs.promises.mkdir(webRoot, { recursive: true });

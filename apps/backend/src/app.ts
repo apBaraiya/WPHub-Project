@@ -14,6 +14,8 @@ import { prisma, isDbOffline } from './repositories/prisma';
 import { inMemoryDb } from './repositories/inMemoryDb';
 import http from 'http';
 
+import { siteResolver } from './services/siteResolver';
+
 const app: express.Application = express();
 
 app.use(
@@ -84,7 +86,11 @@ app.use(async (req: Request, res: Response, next: NextFunction) => {
     }
 
     if (site) {
-      const port = runtimeManager.getSitePort(site.id);
+      let port = runtimeManager.getSitePort(site.id);
+      if (!port) {
+        const siteLoc = siteResolver.resolveSiteLocation(site.id, (site as any).scriptType || '');
+        port = await runtimeManager.startPhpServer(site.id, siteLoc.webRoot);
+      }
       if (port) {
         proxyRequest(req, res, port);
         return;
