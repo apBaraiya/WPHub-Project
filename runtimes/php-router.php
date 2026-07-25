@@ -1,17 +1,47 @@
 <?php
 $root = $_SERVER['DOCUMENT_ROOT'];
 chdir($root);
-$path = '/' . ltrim(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), '/');
 
-if (file_exists($root . $path)) {
-    return false;
+$uri = $_SERVER['REQUEST_URI'] ?? '/';
+$pathOnly = parse_url($uri, PHP_URL_PATH);
+$path = '/' . ltrim($pathOnly, '/');
+
+// 1. If requesting a static asset (css, js, images, fonts), let PHP CLI server serve directly
+$ext = pathinfo($path, PATHINFO_EXTENSION);
+if ($ext && strtolower($ext) !== 'php') {
+    if (file_exists($root . $path)) {
+        return false;
+    }
 }
 
+// 2. If requesting a physical PHP file (e.g., /wp-admin/themes.php, /wp-admin/plugins.php)
+if (file_exists($root . $path) && !is_dir($root . $path)) {
+    $_SERVER['SCRIPT_NAME'] = $pathOnly;
+    $_SERVER['PHP_SELF'] = $pathOnly;
+    $_SERVER['SCRIPT_FILENAME'] = $root . $path;
+    include $root . $path;
+    return true;
+}
+
+// 3. If requesting a directory (e.g., /wp-admin/), check for index.php inside directory
+if (is_dir($root . $path)) {
+    $dirIndex = rtrim($pathOnly, '/') . '/index.php';
+    if (file_exists($root . $dirIndex)) {
+        $_SERVER['SCRIPT_NAME'] = $dirIndex;
+        $_SERVER['PHP_SELF'] = $dirIndex;
+        $_SERVER['SCRIPT_FILENAME'] = $root . $dirIndex;
+        include $root . $dirIndex;
+        return true;
+    }
+}
+
+// 4. Front controller fallback to root /index.php for permalinks
 if (file_exists($root . '/index.php')) {
     $_SERVER['SCRIPT_NAME'] = '/index.php';
-    $_SERVER['SCRIPT_FILENAME'] = $root . '/index.php';
     $_SERVER['PHP_SELF'] = '/index.php';
+    $_SERVER['SCRIPT_FILENAME'] = $root . '/index.php';
     include $root . '/index.php';
-} else {
-    return false;
+    return true;
 }
+
+return false;

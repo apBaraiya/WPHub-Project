@@ -51,8 +51,10 @@ ${salts}
 $table_prefix = '${dbConfig.dbPrefix || 'wp_'}';
 
 define( 'WP_DEBUG', false );
-define( 'WP_SITEURL', 'http://${config.domain}' );
-define( 'WP_HOME', 'http://${config.domain}' );
+$schema = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https://' : 'http://';
+$httpHost = $_SERVER['HTTP_HOST'] ?? '${config.domain}';
+define( 'WP_SITEURL', $schema . $httpHost );
+define( 'WP_HOME', $schema . $httpHost );
 
 if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', __DIR__ . '/' );
