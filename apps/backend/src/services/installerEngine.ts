@@ -228,7 +228,7 @@ export const installerEngine = {
       logger.info(`Script installed successfully: ${appName} on site: ${siteId}`);
     } catch (error: any) {
       logger.error(`Error during Script Installation: ${error.message}`);
-      notify('Failed', 0);
+      notify(`Failed: ${error.message}`, 0);
     }
   },
 };

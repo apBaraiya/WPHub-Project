@@ -70,17 +70,31 @@ async function downloadWithResume(
   maxRetries = 3,
   resumeIfPartial = true
 ): Promise<void> {
+  let currentUrl = url;
   let attempt = 0;
+
   while (attempt < maxRetries) {
     try {
       await new Promise<void>((resolve, reject) => {
         let existingSize = 0;
         if (resumeIfPartial && fs.existsSync(dest)) {
           existingSize = fs.statSync(dest).size;
+          // Reset file if size is corrupted or tiny
+          if (existingSize < 10000) {
+            existingSize = 0;
+            try {
+              fs.unlinkSync(dest);
+            } catch (e) {
+              /* ignore */
+            }
+          }
         }
 
-        const parsedUrl = new URL(url);
-        const headers: Record<string, string> = {};
+        const parsedUrl = new URL(currentUrl);
+        const headers: Record<string, string> = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 WPHub/1.0',
+          'Accept': 'application/zip,application/octet-stream,*/*',
+        };
         if (existingSize > 0) {
           headers['Range'] = `bytes=${existingSize}-`;
         }
@@ -96,20 +110,23 @@ async function downloadWithResume(
         const client = parsedUrl.protocol === 'https:' ? https : http;
         const req = client.request(options, (res) => {
           // Handle HTTP Redirects
-          if (
-            res.statusCode &&
-            res.statusCode >= 300 &&
-            res.statusCode < 400 &&
-            res.headers.location
-          ) {
+          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
             req.destroy();
-            downloadWithResume(res.headers.location, dest, maxRetries - attempt, resumeIfPartial)
+            const redirectUrl = new URL(res.headers.location, currentUrl).toString();
+            logger.info(`Following HTTP ${res.statusCode} redirect to: ${redirectUrl}`);
+            currentUrl = redirectUrl;
+            downloadWithResume(redirectUrl, dest, maxRetries - attempt, resumeIfPartial)
               .then(resolve)
               .catch(reject);
             return;
           }
 
-          // If Range Not Satisfiable, assume fully downloaded
+          if (res.statusCode !== 200 && res.statusCode !== 206 && res.statusCode !== 416) {
+            req.destroy();
+            reject(new Error(`Server returned HTTP status ${res.statusCode}`));
+            return;
+          }
+
           if (res.statusCode === 416) {
             resolve();
             return;
@@ -142,6 +159,13 @@ async function downloadWithResume(
       attempt++;
       logger.warn(`Download attempt ${attempt} failed: ${err.message}. Retrying in backoff...`);
       if (attempt >= maxRetries) {
+        if (fs.existsSync(dest)) {
+          try {
+            fs.unlinkSync(dest);
+          } catch (e) {
+            /* ignore */
+          }
+        }
         throw err;
       }
       await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 1000));
@@ -149,27 +173,41 @@ async function downloadWithResume(
   }
 }
 
-// 3. Cryptographic hash checking
+// 3. Cryptographic hash checking & File Validation
 async function verifySHA256(filePath: string, expectedHash: string): Promise<boolean> {
-  // If no expected checksum configured or placeholder used, bypass for development
-  if (!expectedHash || expectedHash.includes('placeholder')) {
-    logger.info(`SHA-256 hash checks bypassed for development: ${filePath}`);
-    return true;
+  if (!fs.existsSync(filePath)) {
+    return false;
   }
 
-  return new Promise((resolve) => {
-    const hash = crypto.createHash('sha256');
-    const stream = fs.createReadStream(filePath);
+  try {
+    const stats = await fs.promises.stat(filePath);
+    // Release package zips must be larger than 500KB
+    if (stats.size < 500000) {
+      logger.warn(`Cache File size too small (${stats.size} bytes): ${filePath}`);
+      return false;
+    }
 
-    stream.on('data', (data) => hash.update(data));
-    stream.on('end', () => {
-      const computed = hash.digest('hex');
-      resolve(computed === expectedHash);
+    if (!expectedHash || expectedHash.includes('placeholder')) {
+      logger.info(`SHA-256 placeholder check passed for valid file size (${stats.size} bytes): ${filePath}`);
+      return true;
+    }
+
+    return new Promise((resolve) => {
+      const hash = crypto.createHash('sha256');
+      const stream = fs.createReadStream(filePath);
+
+      stream.on('data', (data) => hash.update(data));
+      stream.on('end', () => {
+        const computed = hash.digest('hex');
+        resolve(computed === expectedHash);
+      });
+      stream.on('error', () => {
+        resolve(false);
+      });
     });
-    stream.on('error', () => {
-      resolve(false);
-    });
-  });
+  } catch (err) {
+    return false;
+  }
 }
 
 // 4. Universal CMS Package Manager implementation
@@ -204,7 +242,7 @@ export const cmsPackageManager = {
         logger.info(`Cache Hit: Package ${slug}-${options.version} is verified and valid.`);
         return { localPath, documentRoot: installer.documentRoot };
       }
-      logger.warn(`Cache Corrupted: Deleting invalid cache file: ${localPath}`);
+      logger.warn(`Cache Corrupted/Partial: Deleting invalid cache file: ${localPath}`);
       await fs.promises.unlink(localPath).catch(() => {});
     }
 
@@ -221,10 +259,10 @@ export const cmsPackageManager = {
     const isVerified = await verifySHA256(localPath, metadata.sha256);
     if (!isVerified) {
       await fs.promises.unlink(localPath).catch(() => {});
-      throw new Error(`Integrity check failed: Checksum did not match expected SHA-256.`);
+      throw new Error(`Integrity check failed: Downloaded package ${slug} is corrupted or incomplete.`);
     }
 
-    logger.info(`Package ${slug}-${options.version} verified successfully.`);
+    logger.info(`Package ${slug}-${options.version} downloaded & verified successfully.`);
     return { localPath, documentRoot: installer.documentRoot };
   },
 };
