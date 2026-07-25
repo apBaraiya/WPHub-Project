@@ -57,10 +57,24 @@ export const siteProvisioner = {
     const tmpDir = path.join(sitePath, 'tmp');
     const errorLogPath = path.join(sitePath, 'logs', 'error.log');
     
+    const localExtDir = path.join(process.cwd(), 'runtimes', 'php', 'ext').replace(/\\/g, '/');
+    const extDirSetting = fs.existsSync(localExtDir) ? `extension_dir = "${localExtDir}"` : `extension_dir = "ext"`;
+
     const phpIniContent = `; Site-specific isolated php.ini configuration
-upload_tmp_dir = "${tmpDir}"
-session.save_path = "${tmpDir}"
-error_log = "${errorLogPath}"
+[PHP]
+${extDirSetting}
+extension=mysqli
+extension=pdo_mysql
+extension=curl
+extension=mbstring
+extension=openssl
+extension=fileinfo
+extension=gd
+extension=zip
+
+upload_tmp_dir = "${tmpDir.replace(/\\/g, '/')}"
+session.save_path = "${tmpDir.replace(/\\/g, '/')}"
+error_log = "${errorLogPath.replace(/\\/g, '/')}"
 memory_limit = 256M
 upload_max_filesize = 64M
 post_max_size = 64M
