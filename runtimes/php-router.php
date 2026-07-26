@@ -14,7 +14,7 @@ if ($ext && strtolower($ext) !== 'php') {
     }
 }
 
-// 2. If requesting a physical PHP file (e.g., /wp-admin/themes.php, /wp-admin/plugins.php)
+// 2. If requesting a physical PHP file (e.g., /wp-admin/themes.php, /wp-admin/plugins.php, /wp-admin/edit.php)
 if (file_exists($root . $path) && !is_dir($root . $path)) {
     $_SERVER['SCRIPT_NAME'] = $pathOnly;
     $_SERVER['PHP_SELF'] = $pathOnly;
@@ -23,8 +23,14 @@ if (file_exists($root . $path) && !is_dir($root . $path)) {
     return true;
 }
 
-// 3. If requesting a directory (e.g., /wp-admin/), check for index.php inside directory
+// 3. If requesting a directory (e.g., /wp-admin), enforce trailing slash redirect standard
 if (is_dir($root . $path)) {
+    if (substr($pathOnly, -1) !== '/') {
+        $queryString = isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] !== '' ? '?' . $_SERVER['QUERY_STRING'] : '';
+        header('Location: ' . $pathOnly . '/' . $queryString, true, 301);
+        exit;
+    }
+
     $dirIndex = rtrim($pathOnly, '/') . '/index.php';
     if (file_exists($root . $dirIndex)) {
         $_SERVER['SCRIPT_NAME'] = $dirIndex;

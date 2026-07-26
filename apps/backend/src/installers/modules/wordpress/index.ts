@@ -79,8 +79,13 @@ $title = $argv[1] ?? 'My WordPress';
 $user = $argv[2] ?? 'admin';
 $email = $argv[3] ?? 'admin@example.com';
 $password = $argv[4] ?? 'password';
+$domain = $argv[5] ?? 'localhost';
 
 $result = wp_install( $title, $user, $email, true, '', $password, 'en_US' );
+
+$siteUrl = 'http://' . $domain;
+update_option( 'siteurl', $siteUrl );
+update_option( 'home', $siteUrl );
 echo "INSTALL_SUCCESS";
 `;
 
@@ -90,8 +95,9 @@ echo "INSTALL_SUCCESS";
     const userEsc = config.adminUser.replace(/"/g, '\\"');
     const emailEsc = config.adminEmail.replace(/"/g, '\\"');
     const passEsc = config.adminPass.replace(/"/g, '\\"');
+    const domainEsc = config.domain.replace(/"/g, '\\"');
     
-    const cmd = `"${phpExe}" "${scriptPath}" "${titleEsc}" "${userEsc}" "${emailEsc}" "${passEsc}"`;
+    const cmd = `"${phpExe}" "${scriptPath}" "${titleEsc}" "${userEsc}" "${emailEsc}" "${passEsc}" "${domainEsc}"`;
     
     try {
       const { stdout, stderr } = await execPromise(cmd, { cwd: webRoot });
