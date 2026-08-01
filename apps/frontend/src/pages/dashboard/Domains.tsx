@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { api } from '../../api/client';
 import { Button } from '@wphub/ui';
 import {
   Network,
@@ -11,6 +10,7 @@ import {
   Trash2,
   CheckCircle,
   XCircle,
+  RefreshCw,
 } from 'lucide-react';
 
 interface DomainItem {
@@ -27,29 +27,64 @@ export const Domains: React.FC = () => {
   const navigate = useNavigate();
   const [domains, setDomains] = useState<DomainItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchDomains = async () => {
+    setIsLoading(true);
+    try {
+      // 1. Fetch sites from backend API to extract all site domains
+      const res = await api.get('/sites');
+      const siteList = res.data?.data || [];
+      const siteDomains: DomainItem[] = siteList.map((site: any) => ({
+        id: 'site-' + site.id,
+        domain: site.domain,
+        type: site.domain.endsWith('wphub.cloud') ? 'Cloud Subdomain' : 'Custom Domain',
+        status: site.status === 'ACTIVE' ? 'ACTIVE' : 'PENDING',
+        ssl: true,
+        dnsValid: true,
+        createdAt: site.createdAt
+          ? new Date(site.createdAt).toLocaleDateString()
+          : new Date().toLocaleDateString(),
+      }));
+
+      // 2. Fetch locally registered custom domains
+      const data = localStorage.getItem('wphub_user_domains');
+      let customDomains: DomainItem[] = [];
+      if (data) {
+        try {
+          const parsed = JSON.parse(data);
+          customDomains = parsed.filter(
+            (d: any) =>
+              d.domain !== 'wp.dev' &&
+              d.domain !== 'test.online' &&
+              d.domain !== 'testportfolio.site' &&
+              d.domain !== 'mycoolblog.com' &&
+              d.domain !== 'shop.wphub.cloud',
+          );
+        } catch (e) {
+          customDomains = [];
+        }
+      }
+
+      // Merge lists avoiding duplicates
+      const map = new Map<string, DomainItem>();
+      siteDomains.forEach((d) => map.set(d.domain.toLowerCase(), d));
+      customDomains.forEach((d) => {
+        if (!map.has(d.domain.toLowerCase())) {
+          map.set(d.domain.toLowerCase(), d);
+        }
+      });
+
+      setDomains(Array.from(map.values()));
+    } catch (err) {
+      console.error('Failed to load site domains:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const data = localStorage.getItem('wphub_user_domains');
-    if (data) {
-      try {
-        const parsed = JSON.parse(data);
-        // Clear out pre-existing mock records from the storage list to start clean
-        const filteredList = parsed.filter(
-          (d: any) =>
-            d.domain !== 'wp.dev' &&
-            d.domain !== 'test.online' &&
-            d.domain !== 'testportfolio.site' &&
-            d.domain !== 'mycoolblog.com' &&
-            d.domain !== 'shop.wphub.cloud',
-        );
-        setDomains(filteredList);
-        localStorage.setItem('wphub_user_domains', JSON.stringify(filteredList));
-      } catch (e) {
-        setDomains([]);
-      }
-    } else {
-      setDomains([]); // Empty by default
-    }
+    fetchDomains();
   }, []);
 
   const handleDelete = (id: string) => {
@@ -101,7 +136,11 @@ export const Domains: React.FC = () => {
         </div>
 
         <div className="overflow-x-auto">
-          {filtered.length === 0 ? (
+          {isLoading ? (
+            <div className="flex justify-center py-12">
+              <RefreshCw className="h-8 w-8 animate-spin text-indigo-500" />
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-slate-500 text-sm">
               No domains connected yet. Click &quot;Add Domain&quot; to connect a domain!
             </div>
