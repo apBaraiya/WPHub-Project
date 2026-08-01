@@ -7,7 +7,6 @@ const router: Router = Router();
 router.get('/', authenticate, siteController.getAllSites);
 router.post('/', authenticate, siteController.create);
 router.delete('/:id', authenticate, siteController.delete);
-router.post('/:id/reinstall', authenticate, siteController.reinstall);
 router.get('/preview-domain', siteController.previewByDomain);
 router.get('/preview-domain-internal', siteController.previewByDomain);
 router.get('/preview/:siteId', siteController.preview);

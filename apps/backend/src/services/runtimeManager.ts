@@ -564,21 +564,30 @@ export const runtimeManager = {
     });
   },
 
-  async runMariaDBQuery(query: string): Promise<string> {
+  async runMariaDBQuery(query: string, retries = 5): Promise<string> {
     const mysqlExe = path.join(
       MARIADB_DIR,
       'bin',
       process.platform === 'win32' ? 'mysql.exe' : 'mysql',
     );
-    // Escape double quotes in query for command line execution
     const escapedQuery = query.replace(/"/g, '\\"');
     const cmd = `"${mysqlExe}" -h 127.0.0.1 -P 3306 -u root -e "${escapedQuery}"`;
-    return new Promise((resolve, reject) => {
-      exec(cmd, (err, stdout, stderr) => {
-        if (err) reject(new Error(stderr || err.message));
-        else resolve(stdout);
-      });
-    });
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const stdout = await new Promise<string>((resolve, reject) => {
+          exec(cmd, (err, stdout, stderr) => {
+            if (err) reject(new Error(stderr || err.message));
+            else resolve(stdout);
+          });
+        });
+        return stdout;
+      } catch (err: any) {
+        if (attempt === retries) throw err;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+    throw new Error('MariaDB query failed after maximum retries');
   },
 
   async ensureAllRuntimes() {

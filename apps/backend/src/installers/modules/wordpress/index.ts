@@ -32,6 +32,11 @@ const wordpressPlugin: CMSModulePlugin = {
       `define('NONCE_SALT',       '${Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2)}');`,
     ].join('\n');
 
+    const dbHostValue =
+      !dbConfig.dbPort || dbConfig.dbPort === 3306
+        ? dbConfig.dbHost || '127.0.0.1'
+        : `${dbConfig.dbHost}:${dbConfig.dbPort}`;
+
     const wpConfigContent = `<?php
 /**
  * The base configuration for WordPress
@@ -42,7 +47,7 @@ const wordpressPlugin: CMSModulePlugin = {
 define( 'DB_NAME', '${dbConfig.dbName}' );
 define( 'DB_USER', '${dbConfig.dbUser}' );
 define( 'DB_PASSWORD', '${dbConfig.dbPass}' );
-define( 'DB_HOST', '${dbConfig.dbHost}:${dbConfig.dbPort}' );
+define( 'DB_HOST', '${dbHostValue}' );
 define( 'DB_CHARSET', 'utf8' );
 define( 'DB_COLLATE', '' );
 
@@ -69,6 +74,14 @@ require_once ABSPATH . 'wp-settings.php';
     const { webRoot, config } = ctx;
     const phpExe = runtimeManager.getPhpCommand();
     const scriptPath = path.join(webRoot, 'wp-auto-install.php');
+
+    // Locate site-specific custom php.ini to ensure extension=mysqli and extension=pdo_mysql are loaded during CLI installation
+    let iniFlag = '';
+    const siteDir = path.dirname(webRoot);
+    const customIniPath = path.join(siteDir, 'config', 'php.ini');
+    if (fs.existsSync(customIniPath)) {
+      iniFlag = `-c "${customIniPath}"`;
+    }
     
     const scriptContent = `<?php
 define( 'WP_INSTALLING', true );
@@ -97,7 +110,7 @@ echo "INSTALL_SUCCESS";
     const passEsc = config.adminPass.replace(/"/g, '\\"');
     const domainEsc = config.domain.replace(/"/g, '\\"');
     
-    const cmd = `"${phpExe}" "${scriptPath}" "${titleEsc}" "${userEsc}" "${emailEsc}" "${passEsc}" "${domainEsc}"`;
+    const cmd = `"${phpExe}" ${iniFlag} "${scriptPath}" "${titleEsc}" "${userEsc}" "${emailEsc}" "${passEsc}" "${domainEsc}"`;
     
     try {
       const { stdout, stderr } = await execPromise(cmd, { cwd: webRoot });

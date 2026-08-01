@@ -20,7 +20,6 @@ export interface CMSVersionMetadata {
 
 export interface DownloadOptions {
   version: string;
-  packageUrl?: string;
   maxRetries?: number;
   resumeIfPartial?: boolean;
 }

@@ -8,33 +8,11 @@ export interface SiteLocationInfo {
   sitePath: string;
   documentRootName: string;
   webRoot: string;
-  scriptType?: string;
-  documentRoot?: string;
 }
 
 const SITES_DIR = path.join(process.cwd(), 'sites');
-const siteRegistryMap = new Map<string, SiteLocationInfo>();
 
 export const siteResolver = {
-  registerSite(siteId: string, info: Partial<SiteLocationInfo>) {
-    const loc = this.resolveSiteLocation(siteId, info.scriptType || '');
-    const updated: SiteLocationInfo = {
-      ...loc,
-      ...info,
-      siteId,
-      domain: info.domain || '',
-    };
-    siteRegistryMap.set(siteId, updated);
-  },
-
-  unregisterSite(siteId: string) {
-    siteRegistryMap.delete(siteId);
-  },
-
-  getSite(siteId: string): SiteLocationInfo | undefined {
-    return siteRegistryMap.get(siteId) || this.resolveSiteLocation(siteId, '');
-  },
-
   /**
    * Resolve site path and official webRoot from installer module manifest
    */

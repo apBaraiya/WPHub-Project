@@ -245,21 +245,16 @@ export const ScriptInstaller: React.FC = () => {
         setInstallStep(data.step);
         setInstallProgress(data.progress);
 
-        if (
-          data.step === 'Completed' ||
-          data.step === 'MARK_INSTALLATION_READY' ||
-          data.progress >= 100 ||
-          data.status === 'READY'
-        ) {
+        if (data.step === 'Completed') {
           eventSource.close();
           setInstalling(false);
           setInstallCompleted(true);
           // Auto clean up local storage site parameters so that components update
           localStorage.removeItem('wphub_user_domains');
-        } else if (data.step === 'Failed' || data.status === 'FAILED') {
+        } else if (data.step === 'Failed') {
           eventSource.close();
           setInstalling(false);
-          alert('Script installation failed: ' + (data.error || 'Please check log settings.'));
+          alert('Script installation failed. Please check log settings.');
         }
       };
 

@@ -93,9 +93,14 @@ log_errors = On
 
     // 3. Provision DB on MariaDB
     try {
+      await runtimeManager.ensureMariaDBRuntime();
       await runtimeManager.runMariaDBQuery(`CREATE DATABASE IF NOT EXISTS \`${dbName}\`;`);
       await runtimeManager.runMariaDBQuery(`CREATE USER IF NOT EXISTS '${dbUser}'@'127.0.0.1' IDENTIFIED BY '${dbPass}';`);
+      await runtimeManager.runMariaDBQuery(`CREATE USER IF NOT EXISTS '${dbUser}'@'localhost' IDENTIFIED BY '${dbPass}';`);
+      await runtimeManager.runMariaDBQuery(`CREATE USER IF NOT EXISTS '${dbUser}'@'%' IDENTIFIED BY '${dbPass}';`);
       await runtimeManager.runMariaDBQuery(`GRANT ALL PRIVILEGES ON \`${dbName}\`.* TO '${dbUser}'@'127.0.0.1';`);
+      await runtimeManager.runMariaDBQuery(`GRANT ALL PRIVILEGES ON \`${dbName}\`.* TO '${dbUser}'@'localhost';`);
+      await runtimeManager.runMariaDBQuery(`GRANT ALL PRIVILEGES ON \`${dbName}\`.* TO '${dbUser}'@'%';`);
       await runtimeManager.runMariaDBQuery(`FLUSH PRIVILEGES;`);
       logger.info(`Provisioned isolated database "${dbName}" and user "${dbUser}" for site "${siteId}"`);
     } catch (err: any) {
