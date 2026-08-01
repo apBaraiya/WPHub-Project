@@ -216,7 +216,8 @@ export const cmsProvisioningEngine = {
         }
       }
 
-      await this.updateStatus(siteId, 'READY', 'MARK_INSTALLATION_READY', 100);
+      await this.updateStatus(siteId, 'READY', 'MARK_INSTALLATION_READY', 98);
+      await this.updateStatus(siteId, 'READY', 'Completed', 100);
       logger.info(`Universal Provisioning Pipeline successfully completed for [${siteId}] -> ${domain}`);
     } catch (err: any) {
       logger.error(`Provisioning pipeline failed for [${siteId}]: ${err.message}`);
