@@ -1,3 +1,5 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { Button } from '@wphub/ui';
 import {
@@ -89,13 +91,13 @@ export const Domains: React.FC = () => {
 
   const handleDelete = (id: string) => {
     if (confirm('Are you sure you want to delete this domain assignment?')) {
-      const updated = domains.filter((d) => d.id !== id);
+      const updated = domains.filter((d: DomainItem) => d.id !== id);
       setDomains(updated);
       localStorage.setItem('wphub_user_domains', JSON.stringify(updated));
     }
   };
 
-  const filtered = domains.filter((d) =>
+  const filtered = domains.filter((d: DomainItem) =>
     d.domain.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
@@ -158,7 +160,7 @@ export const Domains: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 text-sm">
-                {filtered.map((item) => (
+                {filtered.map((item: DomainItem) => (
                   <tr key={item.id} className="hover:bg-slate-800/10">
                     <td className="py-4 font-semibold text-slate-200">{item.domain}</td>
                     <td className="py-4">
