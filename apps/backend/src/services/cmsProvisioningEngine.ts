@@ -140,28 +140,44 @@ export const cmsProvisioningEngine = {
 
       // STEP 6: EXTRACT_APPLICATION (CONFIGURING)
       await this.updateStatus(siteId, 'CONFIGURING', 'EXTRACT_APPLICATION', 60);
+
+      // Ensure webRoot directory exists and clear out default placeholder index.html
+      await fs.promises.mkdir(webRoot, { recursive: true });
+      const initialFiles = await fs.promises.readdir(webRoot);
+      for (const f of initialFiles) {
+        if (f === 'index.html' || f.endsWith('.html')) {
+          await fs.promises.rm(path.join(webRoot, f), { recursive: true, force: true }).catch(() => {});
+        }
+      }
+
       const tempExtract = path.join(sitePath, `temp_extract_${Date.now()}`);
       await fs.promises.mkdir(tempExtract, { recursive: true });
 
       const command =
         process.platform === 'win32'
-          ? `powershell -Command "Expand-Archive -Path '${pkg.localPath}' -DestinationPath '${tempExtract}' -Force"`
+          ? `powershell -NoProfile -NonInteractive -Command "Expand-Archive -LiteralPath '${pkg.localPath}' -DestinationPath '${tempExtract}' -Force"`
           : `unzip -o "${pkg.localPath}" -d "${tempExtract}"`;
 
       await execPromise(command);
 
       const contentItems = await fs.promises.readdir(tempExtract);
+      let sourceDir = tempExtract;
       if (
         contentItems.length === 1 &&
         fs.statSync(path.join(tempExtract, contentItems[0])).isDirectory()
       ) {
-        const nestedDir = path.join(tempExtract, contentItems[0]);
-        await fs.promises.cp(nestedDir, webRoot, { recursive: true, force: true });
-      } else {
-        await fs.promises.cp(tempExtract, webRoot, { recursive: true, force: true });
+        sourceDir = path.join(tempExtract, contentItems[0]);
       }
 
+      // Copy extracted CMS files recursively into isolated webRoot
+      await fs.promises.cp(sourceDir, webRoot, { recursive: true, force: true });
       await fs.promises.rm(tempExtract, { recursive: true, force: true });
+
+      // Explicitly delete any remaining index.html in webRoot so index.php takes execution priority
+      const indexHtmlPath = path.join(webRoot, 'index.html');
+      if (fs.existsSync(indexHtmlPath) && fs.existsSync(path.join(webRoot, 'index.php'))) {
+        await fs.promises.unlink(indexHtmlPath).catch(() => {});
+      }
 
       // Run preInstall plugin hook if present
       if (cmsModule.preInstall) {
