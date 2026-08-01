@@ -303,12 +303,16 @@ $ext = pathinfo($cleanPath, PATHINFO_EXTENSION);
 if (is_dir($targetPath)) {
     if (substr($pathOnly, -1) !== '/') {
         $queryString = isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] !== '' ? '?' . $_SERVER['QUERY_STRING'] : '';
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
         header('Location: ' . $pathOnly . '/' . $queryString, true, 301);
         exit;
     }
 
     $dirIndex = rtrim($targetPath, '/') . '/index.php';
     if (file_exists($dirIndex)) {
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
         $scriptRel = rtrim($pathOnly, '/') . '/index.php';
         $_SERVER['SCRIPT_NAME'] = $scriptRel;
         $_SERVER['PHP_SELF'] = $scriptRel;

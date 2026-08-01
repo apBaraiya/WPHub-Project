@@ -11,16 +11,20 @@ $ext = pathinfo($cleanPath, PATHINFO_EXTENSION);
 // 1. Directory Trailing Slash Redirect Standard (cPanel / Nginx / Apache standard)
 // If a directory is requested without a trailing slash (e.g. /wp-admin or /administrator),
 // send an immediate HTTP 301 redirect to add the trailing slash (e.g. /wp-admin/).
-// This ensures browsers resolve relative HTML links (like href="edit.php") to /wp-admin/edit.php.
+// This ensures browsers resolve// 1. Directory Trailing Slash Redirect Standard (cPanel / Nginx / Apache standard)
 if (is_dir($targetPath)) {
     if (substr($pathOnly, -1) !== '/') {
         $queryString = isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] !== '' ? '?' . $_SERVER['QUERY_STRING'] : '';
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
         header('Location: ' . $pathOnly . '/' . $queryString, true, 301);
         exit;
     }
 
     $dirIndex = rtrim($targetPath, '/') . '/index.php';
     if (file_exists($dirIndex)) {
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
         $scriptRel = rtrim($pathOnly, '/') . '/index.php';
         $_SERVER['SCRIPT_NAME'] = $scriptRel;
         $_SERVER['PHP_SELF'] = $scriptRel;
