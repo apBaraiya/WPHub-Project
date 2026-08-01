@@ -232,6 +232,30 @@ export const cmsProvisioningEngine = {
         }
       }
 
+      // Update database record (inMemoryDb / Prisma) to mark site active and set scriptType, dbName, dbUser
+      if (isDbOffline) {
+        const site = inMemoryDb.sites.find((s) => s.id === siteId);
+        if (site) {
+          site.status = 'ACTIVE';
+          (site as any).scriptType = appName;
+          (site as any).dbName = dbConfig.dbName;
+          (site as any).dbUser = dbConfig.dbUser;
+        }
+        saveInMemoryDb();
+      } else {
+        await prisma.site
+          .update({
+            where: { id: siteId },
+            data: {
+              status: 'ACTIVE',
+              scriptType: appName,
+              dbName: dbConfig.dbName,
+              dbUser: dbConfig.dbUser,
+            },
+          })
+          .catch(() => {});
+      }
+
       await this.updateStatus(siteId, 'READY', 'MARK_INSTALLATION_READY', 98);
       await this.updateStatus(siteId, 'READY', 'Completed', 100);
       logger.info(`Universal Provisioning Pipeline successfully completed for [${siteId}] -> ${domain}`);

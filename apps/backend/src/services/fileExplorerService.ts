@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '@wphub/utils';
+import { siteResolver } from './siteResolver';
 
 const WORKSPACE_ROOT = path.resolve(process.cwd());
 const SITES_DIR = path.join(WORKSPACE_ROOT, 'sites');
@@ -28,12 +29,20 @@ function getOctalPermissions(mode: number): string {
   return '0' + (mode & 0o777).toString(8);
 }
 
+function getSiteRoot(siteId: string): string {
+  const loc = siteResolver.getSite(siteId);
+  if (loc && loc.webRoot && fs.existsSync(loc.webRoot)) {
+    return loc.webRoot;
+  }
+  return path.join(SITES_DIR, siteId, 'public_html');
+}
+
 export const fileExplorerService = {
   /**
    * Recursively walks the folders under public_html to generate a directory tree list.
    */
   async getDirectoryTree(siteId: string): Promise<FileExplorerNode[]> {
-    const siteRoot = path.join(SITES_DIR, siteId, 'public_html');
+    const siteRoot = getSiteRoot(siteId);
     if (!fs.existsSync(siteRoot)) {
       return [];
     }
@@ -90,7 +99,7 @@ export const fileExplorerService = {
   ): Promise<FileExplorerNode[]> {
     const cleanRelPath =
       relativePath === 'public_html' ? '' : relativePath.replace(/^public_html\/?/, '');
-    const siteRoot = path.join(SITES_DIR, siteId, 'public_html');
+    const siteRoot = getSiteRoot(siteId);
     const folderPath = path.join(siteRoot, cleanRelPath);
 
     if (!fs.existsSync(folderPath)) {
@@ -128,7 +137,7 @@ export const fileExplorerService = {
   async deletePath(siteId: string, relativePath: string): Promise<boolean> {
     const cleanRelPath =
       relativePath === 'public_html' ? '' : relativePath.replace(/^public_html\/?/, '');
-    const siteRoot = path.join(SITES_DIR, siteId, 'public_html');
+    const siteRoot = getSiteRoot(siteId);
     const targetPath = path.join(siteRoot, cleanRelPath);
 
     if (!fs.existsSync(targetPath)) {
@@ -154,7 +163,7 @@ export const fileExplorerService = {
   ): Promise<boolean> {
     const cleanRelPath =
       relativePath === 'public_html' ? '' : relativePath.replace(/^public_html\/?/, '');
-    const siteRoot = path.join(SITES_DIR, siteId, 'public_html');
+    const siteRoot = getSiteRoot(siteId);
     const targetFolder = path.join(siteRoot, cleanRelPath);
     const targetPath = path.join(targetFolder, name);
 

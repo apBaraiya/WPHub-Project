@@ -47,18 +47,17 @@ export const databaseController = {
       }
 
       for (const site of userSites) {
-        if (site.dbName) {
-          const metrics = getDatabaseMetrics(site.scriptType);
-          results.push({
-            id: `site-db-${site.id}`,
-            name: site.dbName,
-            user: site.dbUser || 'root',
-            pass: 'SecurePassword1!', // Standard auto-provisioned password
-            size: metrics.size,
-            tables: metrics.tables,
-            isAssociatedWithSite: true,
-          });
-        }
+        const dbName = site.dbName || (site.scriptType ? `${site.scriptType.toLowerCase()}_db` : `site_${site.id}_db`);
+        const metrics = getDatabaseMetrics(site.scriptType || 'wordpress');
+        results.push({
+          id: `site-db-${site.id}`,
+          name: dbName,
+          user: site.dbUser || 'root',
+          pass: 'SecurePassword1!', // Standard auto-provisioned password
+          size: metrics.size,
+          tables: metrics.tables,
+          isAssociatedWithSite: true,
+        });
       }
 
       // 2. Fetch custom manually created database instances
