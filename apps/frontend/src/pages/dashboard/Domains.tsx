@@ -1,3 +1,5 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { Button } from '@wphub/ui';
 import {
@@ -68,8 +70,8 @@ export const Domains: React.FC = () => {
 
       // Merge lists avoiding duplicates
       const map = new Map<string, DomainItem>();
-      siteDomains.forEach((d) => map.set(d.domain.toLowerCase(), d));
-      customDomains.forEach((d) => {
+      siteDomains.forEach((d: DomainItem) => map.set(d.domain.toLowerCase(), d));
+      customDomains.forEach((d: DomainItem) => {
         if (!map.has(d.domain.toLowerCase())) {
           map.set(d.domain.toLowerCase(), d);
         }
@@ -89,13 +91,13 @@ export const Domains: React.FC = () => {
 
   const handleDelete = (id: string) => {
     if (confirm('Are you sure you want to delete this domain assignment?')) {
-      const updated = domains.filter((d) => d.id !== id);
+      const updated = domains.filter((d: DomainItem) => d.id !== id);
       setDomains(updated);
       localStorage.setItem('wphub_user_domains', JSON.stringify(updated));
     }
   };
 
-  const filtered = domains.filter((d) =>
+  const filtered = domains.filter((d: DomainItem) =>
     d.domain.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
@@ -158,7 +160,7 @@ export const Domains: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 text-sm">
-                {filtered.map((item) => (
+                {filtered.map((item: DomainItem) => (
                   <tr key={item.id} className="hover:bg-slate-800/10">
                     <td className="py-4 font-semibold text-slate-200">{item.domain}</td>
                     <td className="py-4">
@@ -196,41 +198,36 @@ export const Domains: React.FC = () => {
                       ) : (
                         <div className="flex items-center gap-1.5 text-xs text-amber-400">
                           <XCircle size={14} />
-                          <span>Missing Records</span>
+                          <span>Unresolved</span>
                         </div>
                       )}
                     </td>
-                    <td className="py-4 text-xs text-slate-400">
-                      {new Date(item.createdAt).toLocaleDateString()}
-                    </td>
+                    <td className="py-4 text-xs text-slate-400">{item.createdAt}</td>
                     <td className="py-4 text-right">
-                      <div className="flex justify-end gap-1.5">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => navigate(`/domains/${item.id}`)}
-                          className="bg-transparent hover:bg-slate-800 text-slate-300 border border-slate-700/60 hover:border-slate-500 text-xs py-1"
-                        >
-                          <Settings size={14} className="mr-1 inline-block" />
-                          Manage
-                        </Button>
+                      <div className="flex items-center justify-end gap-2">
                         <a
                           href={`http://${item.domain}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="px-2.5 py-1 text-slate-300 hover:text-slate-100 hover:bg-slate-800 rounded border border-slate-700/60 flex items-center justify-center text-xs"
-                          title="Open Live Site"
+                          className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors"
+                          title="Open Site"
                         >
-                          <ExternalLink size={14} />
+                          <ExternalLink size={15} />
                         </a>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => handleDelete(item.id)}
-                          className="bg-transparent hover:bg-red-500/10 text-red-400 border border-red-500/20 hover:border-red-500/50"
+                        <button
+                          onClick={() => navigate(`/domains/${item.id}`)}
+                          className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors"
+                          title="Domain Settings"
                         >
-                          <Trash2 size={14} />
-                        </Button>
+                          <Settings size={15} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          className="p-1.5 hover:bg-slate-800 rounded text-red-400/80 hover:text-red-400 transition-colors"
+                          title="Delete Domain"
+                        >
+                          <Trash2 size={15} />
+                        </button>
                       </div>
                     </td>
                   </tr>
