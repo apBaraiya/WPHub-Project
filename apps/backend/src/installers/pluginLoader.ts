@@ -17,10 +17,15 @@ export interface CMSModuleManifest {
   id: string;
   displayName: string;
   version: string;
+  category?: 'CMS' | 'Framework' | 'E-Commerce' | 'Blogging';
   documentRoot: string;
+  entrypoint?: string;
+  databaseRequired?: boolean;
+  databaseType?: 'mysql' | 'sqlite' | 'postgres';
+  requiredExtensions?: string[];
+  healthCheckPath?: string;
   defaultPackageUrl: string;
   detectionMarkers: string[];
-  requiredExtensions?: string[];
   main?: string;
 }
 
@@ -47,7 +52,7 @@ export class CMSPluginLoader {
    */
   async discoverAndLoadModules(): Promise<Map<string, CMSModulePlugin>> {
     this.registry.clear();
-    
+
     if (!fs.existsSync(this.modulesDir)) {
       await fs.promises.mkdir(this.modulesDir, { recursive: true });
       return this.registry;
@@ -65,7 +70,7 @@ export class CMSPluginLoader {
             const manifestData = JSON.parse(await fs.promises.readFile(manifestPath, 'utf8')) as CMSModuleManifest;
             const entryFileName = manifestData.main || 'index.ts';
             const entryFile = path.join(moduleFolder, entryFileName);
-            
+
             let plugin: CMSModulePlugin;
             if (fs.existsSync(entryFile)) {
               // Dynamic import of module
@@ -99,9 +104,25 @@ export class CMSPluginLoader {
           id: slug,
           displayName: slug.charAt(0).toUpperCase() + slug.slice(1),
           version: 'latest',
-          documentRoot: slug === 'wordpress' || slug === 'joomla' ? 'public_html' : (slug === 'laravel' ? 'public' : (slug === 'drupal' ? 'web' : '')),
+          category: 'CMS',
+          documentRoot:
+            slug === 'wordpress' || slug === 'joomla'
+              ? 'public_html'
+              : slug === 'laravel' || slug === 'prestashop'
+                ? 'public'
+                : slug === 'drupal'
+                  ? 'web'
+                  : slug === 'magento'
+                    ? 'pub'
+                    : slug === 'ghost'
+                      ? 'current'
+                      : '',
+          entrypoint: slug === 'ghost' ? 'index.js' : 'index.php',
+          databaseRequired: true,
+          databaseType: 'mysql',
           defaultPackageUrl: `https://github.com/${slug}/${slug}/archive/refs/heads/main.zip`,
           detectionMarkers: [],
+          healthCheckPath: '/',
         },
         verifyInstall: async () => true,
       };

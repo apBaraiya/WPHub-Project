@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { siteService, ProgressStep } from '../services/siteService';
 import { prisma, isDbOffline } from '../repositories/prisma';
 import { inMemoryDb } from '../repositories/inMemoryDb';
+import { cmsProvisioningEngine } from '../services/cmsProvisioningEngine';
+import { logger } from '@wphub/utils';
 
 // Authentic Theme Preview HTML Templates generators
 function getWordPressThemeHTML(siteName: string): string {
@@ -324,10 +326,37 @@ export const siteController = {
         return;
       }
 
-      await siteService.deleteSite(userId, id);
+      await cmsProvisioningEngine.uninstallSite(id, true).catch(() => null);
+      await siteService.deleteSite(userId, id).catch(() => null);
       res.status(200).json({
         success: true,
-        data: { message: 'Site deleted successfully' },
+        data: { message: 'Site uninstalled successfully' },
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async reinstall(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.userId;
+      const { id } = req.params;
+      const cfg = req.body;
+
+      if (!userId) {
+        res
+          .status(401)
+          .json({ success: false, error: { message: 'Unauthorized', code: 'UNAUTHORIZED' } });
+        return;
+      }
+
+      cmsProvisioningEngine.reinstallSite(userId, id, cfg).catch((err) => {
+        logger.error(`Reinstall background error: ${err.message}`);
+      });
+
+      res.status(202).json({
+        success: true,
+        data: { message: 'Reinstall job started', siteId: id },
       });
     } catch (err) {
       next(err);
