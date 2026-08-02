@@ -17,7 +17,8 @@ if (is_dir($targetPath)) {
         $queryString = isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] !== '' ? '?' . $_SERVER['QUERY_STRING'] : '';
         header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
         header('Pragma: no-cache');
-        header('Location: ' . $pathOnly . '/' . $queryString, true, 301);
+        header('Expires: 0');
+        header('Location: ' . $pathOnly . '/' . $queryString, true, 302);
         exit;
     }
 

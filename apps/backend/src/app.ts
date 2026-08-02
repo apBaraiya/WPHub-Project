@@ -86,6 +86,16 @@ app.use(async (req: Request, res: Response, next: NextFunction) => {
     }
 
     if (site) {
+      // Enforce non-cacheable 302 trailing slash redirect for /wp-admin to guarantee relative browser link expansion
+      if (req.path === '/wp-admin') {
+        const query = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.redirect(302, '/wp-admin/' + query);
+        return;
+      }
+
       let port = runtimeManager.getSitePort(site.id);
       if (!port) {
         const siteLoc = siteResolver.resolveSiteLocation(site.id, (site as any).scriptType || '');
