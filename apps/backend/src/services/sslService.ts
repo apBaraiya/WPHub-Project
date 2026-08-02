@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import dns from 'dns';
 import http from 'http';
-import crypto from 'crypto';
+import selfsigned from 'selfsigned';
 import { logger } from '@wphub/utils';
 import { prisma, isDbOffline, checkDbConnection } from '../repositories/prisma';
 import { inMemoryDb } from '../repositories/inMemoryDb';
@@ -66,7 +66,11 @@ export const sslService = {
     const cleanHost = hostname.toLowerCase().trim();
 
     // Local development/test subdomains are automatically valid
-    if (cleanHost.endsWith('.wphub.cloud') || cleanHost === 'localhost' || cleanHost.endsWith('.test')) {
+    if (
+      cleanHost.endsWith('.wphub.cloud') ||
+      cleanHost === 'localhost' ||
+      cleanHost.endsWith('.test')
+    ) {
       return { valid: true, ip: '127.0.0.1' };
     }
 
@@ -85,7 +89,8 @@ export const sslService = {
 
           resolve({
             valid: false,
-            reason: 'DNS_NOT_CONFIGURED: Domain hostname does not resolve to an active A/AAAA or NS record.',
+            reason:
+              'DNS_NOT_CONFIGURED: Domain hostname does not resolve to an active A/AAAA or NS record.',
           });
         });
       });
@@ -95,37 +100,31 @@ export const sslService = {
   /**
    * Generate robust X.509 self-contained TLS Certificate pair (PEM format) for fallback/staging/local ACME
    */
-  generateCertificatePair(hostname: string, sanList: string[] = []): { cert: string; key: string; expiresAt: Date } {
+  async generateCertificatePair(
+    hostname: string,
+    sanList: string[] = [],
+  ): Promise<{ cert: string; key: string; expiresAt: Date }> {
     this.ensureStorageDirs();
     const allHosts = Array.from(new Set([hostname, ...sanList]));
+    const altNames = allHosts.map((h) => ({ type: h.includes(':') ? 7 : 2, value: h }));
 
-    // Generate RSA key pair
-    const { privateKey } = crypto.generateKeyPairSync('rsa', {
-      modulusLength: 2048,
-      publicKeyEncoding: { type: 'spki', format: 'pem' },
-      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    const attrs = [{ name: 'commonName', value: hostname }];
+    const pems = await (selfsigned.generate as any)(attrs, {
+      days: 90,
+      keySize: 2048,
+      algorithm: 'sha256',
+      extensions: [
+        { name: 'basicConstraints', cA: true },
+        { name: 'keyUsage', keyCertSign: true, digitalSignature: true, keyEncipherment: true },
+        { name: 'subjectAltName', altNames },
+      ],
     });
 
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 90 days ACME lifecycle
+    const expiresAt = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
 
-    // Standard X.509 certificate headers & payload
-    const certHeader = `-----BEGIN CERTIFICATE-----\n`;
-    const certFooter = `\n-----END CERTIFICATE-----\n`;
-    const payload = Buffer.from(
-      JSON.stringify({
-        subject: hostname,
-        san: allHosts,
-        issuer: "WPHub ACME Engine (Let's Encrypt Compatible)",
-        notBefore: now.toISOString(),
-        notAfter: expiresAt.toISOString(),
-        nonce: crypto.randomBytes(16).toString('hex'),
-      }),
-    ).toString('base64');
-
-    const certPem = certHeader + payload.match(/.{1,64}/g)?.join('\n') + certFooter;
-
-    return { cert: certPem, key: privateKey, expiresAt };
+    const privateKeyStr = pems.private || (pems as any).key || (pems as any).privateKey || '';
+    return { cert: pems.cert, key: privateKeyStr, expiresAt };
   },
 
   /**
@@ -209,7 +208,7 @@ export const sslService = {
 
     try {
       // Step 3: Issue Certificate Pair via ACME / Infrastructure Engine
-      const { cert, key, expiresAt } = this.generateCertificatePair(cleanHost, allSans);
+      const { cert, key, expiresAt } = await this.generateCertificatePair(cleanHost, allSans);
       const issuedAt = new Date();
 
       // Step 4: Secure Infrastructure Storage (Private key stored ONLY in protected runtimes/ssl/)
@@ -279,7 +278,9 @@ export const sslService = {
         sanList: allSans,
       });
 
-      logger.info(`Successfully provisioned HTTPS TLS certificate for "${cleanHost}" [Status: ${finalStatus}]`);
+      logger.info(
+        `Successfully provisioned HTTPS TLS certificate for "${cleanHost}" [Status: ${finalStatus}]`,
+      );
       return certRecord;
     } catch (err: any) {
       logger.error(`Certificate provisioning failed for "${cleanHost}": ${err.message}`);
@@ -454,8 +455,15 @@ export const sslService = {
 
       // Trigger automatic renewal if certificate expires in less than 30 days
       if (daysLeft <= 30 && cert.autoRenew) {
-        logger.info(`Certificate for "${cert.hostname}" is expiring in ${daysLeft} days. Triggering auto-renewal...`);
-        await this.provisionCertificate(cert.hostname, cert.siteId || undefined, cert.domainId || undefined, cert.sanList);
+        logger.info(
+          `Certificate for "${cert.hostname}" is expiring in ${daysLeft} days. Triggering auto-renewal...`,
+        );
+        await this.provisionCertificate(
+          cert.hostname,
+          cert.siteId || undefined,
+          cert.domainId || undefined,
+          cert.sanList,
+        );
         renewed++;
       }
     }

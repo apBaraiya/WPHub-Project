@@ -72,7 +72,7 @@ try {
 // 3. Secure HTTPS Custom Domain Server (Port 443)
 const SSL_STORAGE_DIR = path.join(WORKSPACE_ROOT, 'runtimes', 'ssl');
 
-const getSecureContext = (servername: string) => {
+const getSecureContext = async (servername: string) => {
   const cleanHost = (servername || 'wphub.cloud').toLowerCase().trim();
   const keyPath = path.join(SSL_STORAGE_DIR, `${cleanHost}.key`);
   const crtPath = path.join(SSL_STORAGE_DIR, `${cleanHost}.crt`);
@@ -83,7 +83,7 @@ const getSecureContext = (servername: string) => {
       cert: fs.readFileSync(crtPath),
     });
   }
-  const certPair = sslService.generateCertificatePair(cleanHost);
+  const certPair = await sslService.generateCertificatePair(cleanHost);
   return tls.createSecureContext({
     key: certPair.key,
     cert: certPair.cert,
@@ -92,9 +92,9 @@ const getSecureContext = (servername: string) => {
 
 const httpsDomainServer = https.createServer(
   {
-    SNICallback: (servername, cb) => {
+    SNICallback: async (servername, cb) => {
       try {
-        const ctx = getSecureContext(servername);
+        const ctx = await getSecureContext(servername);
         cb(null, ctx);
       } catch (err: any) {
         cb(err);
@@ -116,7 +116,9 @@ httpsDomainServer.on('error', (err: any) => {
 
 try {
   httpsDomainServer.listen(httpsPort, () => {
-    logger.info(`Secure HTTPS Domain Server is listening on port ${httpsPort} for TLS domain URLs.`);
+    logger.info(
+      `Secure HTTPS Domain Server is listening on port ${httpsPort} for TLS domain URLs.`,
+    );
   });
 } catch (err: any) {
   logger.warn(`Could not start HTTPS Server on port ${httpsPort}: ${err.message}`);
