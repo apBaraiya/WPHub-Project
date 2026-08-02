@@ -246,7 +246,7 @@ export const SitesPage: React.FC = () => {
                     </td>
                     <td className="py-4">
                       <a
-                        href={`http://${site.domain}`}
+                        href={`https://${site.domain}`}
                         target="_blank"
                         rel="noreferrer"
                         className="text-indigo-400 hover:underline font-medium"

@@ -217,7 +217,7 @@ export const Domains: React.FC = () => {
                           Manage
                         </Button>
                         <a
-                          href={`http://${item.domain}`}
+                          href={`https://${item.domain}`}
                           target="_blank"
                           rel="noreferrer"
                           className="px-2.5 py-1 text-slate-300 hover:text-slate-100 hover:bg-slate-800 rounded border border-slate-700/60 flex items-center justify-center text-xs"
