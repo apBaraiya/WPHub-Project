@@ -15,11 +15,12 @@ const laravelPlugin: CMSModulePlugin = {
 
   async generateConfig(ctx: InstallContext): Promise<void> {
     const { webRoot, config, dbConfig } = ctx;
+    const proto = config.protocol || 'https';
     const envContent = `APP_NAME="${config.siteName}"
 APP_ENV=local
 APP_KEY=base64:${Buffer.from(Math.random().toString()).toString('base64')}
 APP_DEBUG=true
-APP_URL=http://${config.domain}
+APP_URL=${proto}://${config.domain}
 
 DB_CONNECTION=mysql
 DB_HOST=${dbConfig.dbHost}

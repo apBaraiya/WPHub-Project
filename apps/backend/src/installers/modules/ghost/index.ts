@@ -15,8 +15,9 @@ const ghostPlugin: CMSModulePlugin = {
 
   async generateConfig(ctx: InstallContext): Promise<void> {
     const { webRoot, config, dbConfig } = ctx;
+    const proto = config.protocol || 'https';
     const ghostConfig = {
-      url: `http://${config.domain}`,
+      url: `${proto}://${config.domain}`,
       server: { port: 2368, host: '127.0.0.1' },
       database: {
         client: 'mysql',

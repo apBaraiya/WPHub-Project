@@ -521,4 +521,81 @@ export const sslService = {
       updatedAt: new Date(record.updatedAt).toISOString(),
     };
   },
+
+  /**
+   * Determine canonical domain protocol (https vs http)
+   */
+  async getCanonicalDomainProtocol(domain: string): Promise<'https' | 'http'> {
+    const cleanHost = domain.toLowerCase().trim();
+    const cert = await this.getCertificateStatus(cleanHost);
+    if (cert && (cert.status === 'ACTIVE' || cert.status === 'ISSUED')) {
+      return 'https';
+    }
+    await checkDbConnection();
+    let dom;
+    if (isDbOffline) {
+      dom = inMemoryDb.domains.find((d) => d.domain.toLowerCase() === cleanHost);
+    } else {
+      dom = await prisma.domain.findUnique({ where: { domain: cleanHost } });
+    }
+    if (dom && dom.ssl !== false && dom.dnsValid !== false) {
+      return 'https';
+    }
+    if (cleanHost.endsWith('.wphub.cloud') || cleanHost.endsWith('.test')) {
+      return 'https';
+    }
+    return 'https'; // WPHub default policy: HTTPS enabled by default
+  },
+
+  /**
+   * Safely synchronize/migrate existing CMS site configuration to HTTPS
+   */
+  async syncSiteHttpsConfig(siteId: string, domain: string, webRoot: string): Promise<boolean> {
+    const cleanHost = domain.toLowerCase().trim();
+    const targetUrl = `https://${cleanHost}`;
+
+    try {
+      // 1. WordPress Safe Migration (wp-config.php and database options)
+      const wpConfigPath = path.join(webRoot, 'wp-config.php');
+      if (fs.existsSync(wpConfigPath)) {
+        let content = await fs.promises.readFile(wpConfigPath, 'utf8');
+        if (!content.includes('HTTP_X_FORWARDED_PROTO')) {
+          const headerSnippet = `\nif (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {\n    $_SERVER['HTTPS'] = 'on';\n}\n`;
+          content = content.replace(/<\?php/i, `<?php${headerSnippet}`);
+          await fs.promises.writeFile(wpConfigPath, content, 'utf8');
+        }
+      }
+
+      // 2. Laravel .env Migration
+      const laravelEnvPath = path.join(webRoot, '..', '.env');
+      if (fs.existsSync(laravelEnvPath)) {
+        let envContent = await fs.promises.readFile(laravelEnvPath, 'utf8');
+        if (envContent.includes('APP_URL=http://')) {
+          envContent = envContent.replace(/APP_URL=http:\/\/[^\s]+/g, `APP_URL=${targetUrl}`);
+          await fs.promises.writeFile(laravelEnvPath, envContent, 'utf8');
+        }
+      }
+
+      // 3. Ghost config.production.json Migration
+      const ghostConfigPath = path.join(webRoot, 'config.production.json');
+      if (fs.existsSync(ghostConfigPath)) {
+        try {
+          const raw = await fs.promises.readFile(ghostConfigPath, 'utf8');
+          const json = JSON.parse(raw);
+          if (json.url && json.url.startsWith('http://')) {
+            json.url = targetUrl;
+            await fs.promises.writeFile(ghostConfigPath, JSON.stringify(json, null, 2), 'utf8');
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      logger.info(`Synchronized HTTPS canonical URL (${targetUrl}) for site ${siteId}`);
+      return true;
+    } catch (err: any) {
+      logger.warn(`Failed syncing HTTPS config for site ${siteId}: ${err.message}`);
+      return false;
+    }
+  },
 };

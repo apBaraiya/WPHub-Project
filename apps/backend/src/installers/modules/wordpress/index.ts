@@ -56,7 +56,16 @@ ${salts}
 $table_prefix = '${dbConfig.dbPrefix || 'wp_'}';
 
 define( 'WP_DEBUG', false );
-$schema = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https://' : 'http://';
+if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+    $_SERVER['HTTPS'] = 'on';
+}
+
+$targetProto = '${config.protocol || 'https'}';
+$schema = (
+    (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ||
+    (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
+) ? 'https://' : $targetProto . '://';
+
 $httpHost = $_SERVER['HTTP_HOST'] ?? '${config.domain}';
 define( 'WP_SITEURL', $schema . $httpHost );
 define( 'WP_HOME', $schema . $httpHost );
@@ -93,10 +102,11 @@ $user = $argv[2] ?? 'admin';
 $email = $argv[3] ?? 'admin@example.com';
 $password = $argv[4] ?? 'password';
 $domain = $argv[5] ?? 'localhost';
+$protocol = $argv[6] ?? 'https';
 
 $result = wp_install( $title, $user, $email, true, '', $password, 'en_US' );
 
-$siteUrl = 'http://' . $domain;
+$siteUrl = $protocol . '://' . $domain;
 update_option( 'siteurl', $siteUrl );
 update_option( 'home', $siteUrl );
 echo "INSTALL_SUCCESS";
@@ -109,8 +119,9 @@ echo "INSTALL_SUCCESS";
     const emailEsc = config.adminEmail.replace(/"/g, '\\"');
     const passEsc = config.adminPass.replace(/"/g, '\\"');
     const domainEsc = config.domain.replace(/"/g, '\\"');
+    const protoEsc = (config.protocol || 'https').replace(/"/g, '\\"');
     
-    const cmd = `"${phpExe}" ${iniFlag} "${scriptPath}" "${titleEsc}" "${userEsc}" "${emailEsc}" "${passEsc}" "${domainEsc}"`;
+    const cmd = `"${phpExe}" ${iniFlag} "${scriptPath}" "${titleEsc}" "${userEsc}" "${emailEsc}" "${passEsc}" "${domainEsc}" "${protoEsc}"`;
     
     try {
       const { stdout, stderr } = await execPromise(cmd, { cwd: webRoot });

@@ -10,6 +10,7 @@ import { installerRegistry } from './cmsInstallers';
 import { cmsPackageManager } from './cmsPackageManager';
 import { siteProvisioner } from './siteProvisioner';
 import { cmsVerificationEngine } from './cmsVerificationEngine';
+import { sslService } from './sslService';
 
 const execPromise = util.promisify(exec);
 
@@ -48,6 +49,7 @@ export const installerEngine = {
 
   async runInstallation(userId: string, cfg: InstallConfig) {
     const { siteId, appName, appVersion, directory } = cfg;
+    cfg.protocol = await sslService.getCanonicalDomainProtocol(cfg.domain);
 
     const notify = (step: string, progress: number) => {
       const cb = progressMap.get(siteId);
@@ -160,6 +162,9 @@ export const installerEngine = {
             throw new Error(`12-point health check suite failed (${report.failedChecks} checks failed).`);
           }
           logger.info('CMS 12-point verification suite passed successfully.');
+
+          // Synchronize and enforce HTTPS canonical URLs
+          await sslService.syncSiteHttpsConfig(siteId, cfg.domain, webRoot);
         } catch (setupErr: any) {
           logger.error(`Installation verification failed: ${setupErr.message}. Triggering deprovisioning rollback...`);
           
