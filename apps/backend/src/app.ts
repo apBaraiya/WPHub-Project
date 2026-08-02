@@ -8,6 +8,7 @@ import domainRoutes from './routes/domains';
 import installerRoutes from './routes/installers';
 import fileRoutes from './routes/files';
 import databaseRoutes from './routes/databases';
+import sslRoutes from './routes/ssl';
 import { logger } from '@wphub/utils';
 import { runtimeManager } from './services/runtimeManager';
 import { prisma, isDbOffline } from './repositories/prisma';
@@ -121,6 +122,8 @@ app.use('/api/domains', domainRoutes);
 app.use('/api/installers', installerRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/databases', databaseRoutes);
+app.use('/api/ssl', sslRoutes);
+app.use('/api', sslRoutes);
 
 // Health check
 app.get('/api/health', (_req: Request, res: Response) => {

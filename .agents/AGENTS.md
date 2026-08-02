@@ -9,9 +9,9 @@ STEP 5  Site Management                 ✅
 STEP 6  Hosting Orchestration           ✅
 STEP 7  Real Docker Engine              ✅
 STEP 8  Universal Routing               ✅
-STEP 9  Universal CMS Provisioning      🔜 ← CURRENT FOCUS
-STEP 10 SSL / HTTPS / Certificates      🔜
-STEP 11 Domains & DNS                   🔜
+STEP 9  Universal CMS Provisioning      ✅
+STEP 10 SSL / HTTPS / Certificates      ✅
+STEP 11 Domains & DNS                   🔜 ← CURRENT FOCUS
 STEP 12 File Manager                    🔜
 STEP 13 Backup / Restore                🔜
 STEP 14 Logs / Metrics                  🔜

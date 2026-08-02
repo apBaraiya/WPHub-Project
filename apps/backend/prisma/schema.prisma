@@ -184,20 +184,47 @@ model Site {
 }
 
 model Domain {
-  id        String   @id @default(uuid())
+  id        String       @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  siteId    String?
   name      String
   extension String
-  domain    String   @unique
-  type      String   @default("Primary")
-  status    String   @default("ACTIVE")
-  ssl       Boolean  @default(true)
-  dnsValid  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  domain    String       @unique
+  type      String       @default("Primary")
+  status    String       @default("ACTIVE")
+  ssl       Boolean      @default(true)
+  dnsValid  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  certificates Certificate[]
 
   @@index([userId])
+  @@index([siteId])
+}
+
+model Certificate {
+  id            String    @id @default(uuid())
+  domainId      String?
+  domain        Domain?   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  siteId        String?
+  hostname      String    @unique
+  status        String    @default("PENDING") // PENDING, REQUESTING, ISSUED, ACTIVE, RENEWING, EXPIRING, EXPIRED, FAILED, DNS_NOT_CONFIGURED
+  issuer        String    @default("Let's Encrypt")
+  issuedAt      DateTime?
+  expiresAt     DateTime?
+  lastRenewalAt DateTime?
+  lastError     String?
+  autoRenew     Boolean   @default(true)
+  dnsValid      Boolean   @default(true)
+  httpsValid    Boolean   @default(false)
+  sanList       String[]  @default([])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([hostname])
+  @@index([domainId])
+  @@index([siteId])
 }
 
 model InstallHistory {

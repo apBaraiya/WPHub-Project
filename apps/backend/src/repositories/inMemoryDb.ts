@@ -62,6 +62,7 @@ export interface InMemoryInstallHistory {
 export interface InMemoryDomain {
   id: string;
   userId: string;
+  siteId?: string | null;
   name: string;
   extension: string;
   domain: string;
@@ -103,10 +104,30 @@ export interface InMemoryDatabaseInstance {
   createdAt: Date;
 }
 
+export interface InMemoryCertificate {
+  id: string;
+  domainId?: string | null;
+  siteId?: string | null;
+  hostname: string;
+  status: 'PENDING' | 'REQUESTING' | 'ISSUED' | 'ACTIVE' | 'RENEWING' | 'EXPIRING' | 'EXPIRED' | 'FAILED' | 'DNS_NOT_CONFIGURED' | 'DOMAIN_NOT_REACHABLE';
+  issuer: string;
+  issuedAt?: Date | null;
+  expiresAt?: Date | null;
+  lastRenewalAt?: Date | null;
+  lastError?: string | null;
+  autoRenew: boolean;
+  dnsValid: boolean;
+  httpsValid: boolean;
+  sanList: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 class InMemoryDatabase {
   users: InMemoryUser[] = [];
   sites: InMemorySite[] = [];
   domains: InMemoryDomain[] = [];
+  certificates: InMemoryCertificate[] = [];
   refreshTokens: InMemoryRefreshToken[] = [];
   sessions: InMemorySession[] = [];
   installHistories: InMemoryInstallHistory[] = [];
