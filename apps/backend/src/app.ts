@@ -27,6 +27,18 @@ app.use(
 );
 app.use(express.json());
 app.use(cookieParser());
+import { sslService } from './services/sslService';
+
+// ACME Let's Encrypt HTTP-01 Challenge Endpoint
+app.get('/.well-known/acme-challenge/:token', (req: Request, res: Response) => {
+  const token = req.params.token;
+  const keyAuth = sslService.getAcmeChallenge(token);
+  if (keyAuth) {
+    res.type('text/plain').send(keyAuth);
+  } else {
+    res.status(404).send('ACME challenge token not found');
+  }
+});
 
 // Request logger middleware
 app.use((req: Request, _res: Response, next: NextFunction) => {

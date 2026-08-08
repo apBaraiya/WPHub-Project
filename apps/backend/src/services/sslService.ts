@@ -4,9 +4,12 @@ import dns from 'dns';
 import tls from 'tls';
 import { execSync } from 'child_process';
 import selfsigned from 'selfsigned';
+import * as acme from 'acme-client';
 import { logger } from '@wphub/utils';
 import { prisma, isDbOffline, checkDbConnection } from '../repositories/prisma';
 import { inMemoryDb } from '../repositories/inMemoryDb';
+
+const acmeChallenges = new Map<string, string>();
 
 const WORKSPACE_ROOT = path.resolve(process.cwd());
 const INFRA_DIR = path.join(WORKSPACE_ROOT, 'wphub', 'infrastructure');
@@ -57,6 +60,77 @@ export const sslService = {
       if (!fs.existsSync(d)) {
         fs.mkdirSync(d, { recursive: true });
       }
+    }
+  },
+
+  getAcmeChallenge(token: string): string | undefined {
+    return acmeChallenges.get(token);
+  },
+
+  /**
+   * Request real Let's Encrypt / ACME Certificate using HTTP-01 challenge
+   */
+  async issueAcmeCertificate(
+    hostname: string,
+    sanList: string[] = [],
+  ): Promise<{ cert: string; key: string; expiresAt: Date }> {
+    this.ensureStorageDirs();
+    const cleanHost = hostname.toLowerCase().trim();
+    const allSans = Array.from(new Set([cleanHost, ...sanList]));
+
+    const directoryUrl = process.env.ACME_CA_SERVER || acme.directory.letsencrypt.production;
+    const accountEmail = process.env.ACME_EMAIL || 'admin@wphub.cloud';
+
+    try {
+      logger.info(`Initiating Let's Encrypt ACME RFC 8555 certificate order for "${cleanHost}"...`);
+      const accountKey = await acme.crypto.createPrivateKey();
+
+      const client = new acme.Client({
+        directoryUrl,
+        accountKey,
+      });
+
+      await client.createAccount({
+        termsOfServiceAgreed: true,
+        contact: [`mailto:${accountEmail}`],
+      });
+
+      const [certKey, csr] = await acme.crypto.createCsr({
+        commonName: cleanHost,
+        altNames: allSans,
+      });
+
+      const certPem = await client.auto({
+        csr,
+        email: accountEmail,
+        termsOfServiceAgreed: true,
+        challengeCreateFn: async (_authz, challenge, keyAuthorization) => {
+          if (challenge.type === 'http-01') {
+            acmeChallenges.set(challenge.token, keyAuthorization);
+            logger.info(
+              `ACME HTTP-01 challenge token created for ${cleanHost}: ${challenge.token}`,
+            );
+          }
+        },
+        challengeRemoveFn: async (_authz, challenge) => {
+          if (challenge.type === 'http-01') {
+            acmeChallenges.delete(challenge.token);
+          }
+        },
+      });
+
+      const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+      logger.info(`Successfully issued Let's Encrypt production certificate for "${cleanHost}"!`);
+      return {
+        cert: certPem,
+        key: certKey.toString('utf8'),
+        expiresAt,
+      };
+    } catch (acmeErr: any) {
+      logger.warn(
+        `Public ACME challenge failed for "${cleanHost}": ${acmeErr.message}. Falling back to Root CA signed certificate.`,
+      );
+      return await this.generateCertificatePair(cleanHost, allSans);
     }
   },
 
@@ -153,7 +227,7 @@ export const sslService = {
     sanList: string[] = [],
   ): Promise<{ cert: string; key: string; expiresAt: Date }> {
     this.ensureStorageDirs();
-    await this.ensureRootCA();
+    const root = await this.ensureRootCA();
 
     const allHosts = Array.from(new Set([hostname, ...sanList]));
     const altNames = allHosts.map((h) => ({ type: h.includes(':') ? 7 : 2, value: h }));
@@ -163,6 +237,7 @@ export const sslService = {
       days: 90,
       keySize: 2048,
       algorithm: 'sha256',
+      ca: { cert: root.cert, key: root.key },
       extensions: [
         { name: 'basicConstraints', cA: false },
         { name: 'keyUsage', digitalSignature: true, keyEncipherment: true },
@@ -282,7 +357,7 @@ export const sslService = {
 
     try {
       // Step 3: Issue Certificate Pair via ACME / Infrastructure Engine
-      const { cert, key, expiresAt } = await this.generateCertificatePair(cleanHost, allSans);
+      const { cert, key, expiresAt } = await this.issueAcmeCertificate(cleanHost, allSans);
       const issuedAt = new Date();
 
       // Step 4: Secure Infrastructure Storage (Private key stored ONLY in protected runtimes/ssl/)
