@@ -32,8 +32,6 @@ export interface InstallConfig {
   dbPrefix: string;
 }
 
-
-
 // Progress listener registry (SSE)
 const progressMap = new Map<string, (step: string, progress: number) => void>();
 
@@ -63,6 +61,7 @@ export const installerEngine = {
     let provisioned;
     try {
       notify('Preparing...', 10);
+      await runtimeManager.ensureMariaDBRuntime();
       provisioned = await siteProvisioner.provision(siteId, cfg.domain, {
         documentRoot: installer.documentRoot,
         directory,
@@ -128,7 +127,7 @@ export const installerEngine = {
         dbPass,
         dbHost: '127.0.0.1',
         dbPort: 3306,
-        dbPrefix: cfg.dbPrefix
+        dbPrefix: cfg.dbPrefix,
       };
       await installer.configure(webRoot, cfg, dbConfig);
 
@@ -139,7 +138,7 @@ export const installerEngine = {
       if (runtimeManager.isReady()) {
         try {
           await installer.install(webRoot, cfg);
-          
+
           // Verify site installation using 12-point verification suite
           const verified = await installer.verify(sitePort, webRoot, cfg);
           if (!verified) {
@@ -155,19 +154,23 @@ export const installerEngine = {
             dbUser,
             cfg.adminUser,
             cfg.adminPass,
-            { maxRetries: 3, autoRollbackOnFailure: true }
+            { maxRetries: 3, autoRollbackOnFailure: true },
           );
 
           if (!report.overallPassed) {
-            throw new Error(`12-point health check suite failed (${report.failedChecks} checks failed).`);
+            throw new Error(
+              `12-point health check suite failed (${report.failedChecks} checks failed).`,
+            );
           }
           logger.info('CMS 12-point verification suite passed successfully.');
 
           // Synchronize and enforce HTTPS canonical URLs
           await sslService.syncSiteHttpsConfig(siteId, cfg.domain, webRoot);
         } catch (setupErr: any) {
-          logger.error(`Installation verification failed: ${setupErr.message}. Triggering deprovisioning rollback...`);
-          
+          logger.error(
+            `Installation verification failed: ${setupErr.message}. Triggering deprovisioning rollback...`,
+          );
+
           if (installer.onRollback) {
             await installer.onRollback(webRoot, cfg, setupErr).catch((e) => {
               logger.error(`Module rollback failed: ${e.message}`);

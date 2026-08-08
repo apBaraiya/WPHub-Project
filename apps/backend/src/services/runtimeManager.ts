@@ -23,8 +23,7 @@ const MARIADB_WIN_URL =
 // phpMyAdmin Paths & Config
 const PMA_DIR = path.join(RUNTIMES_DIR, 'phpmyadmin');
 const PMA_ZIP_PATH = path.join(RUNTIMES_DIR, 'phpmyadmin.zip');
-const PMA_URL =
-  'https://files.phpmyadmin.net/phpMyAdmin/5.2.1/phpMyAdmin-5.2.1-all-languages.zip';
+const PMA_URL = 'https://files.phpmyadmin.net/phpMyAdmin/5.2.1/phpMyAdmin-5.2.1-all-languages.zip';
 
 // Track active PHP servers
 const activeProcesses = new Map<string, ChildProcess>();
@@ -206,14 +205,18 @@ export const runtimeManager = {
     // Spawn server process using the central PHP router script to prevent 404s on subpages/rewrites
     const routerPath = path.join(RUNTIMES_DIR, 'php-router.php');
     const customIniPath = path.join(WORKSPACE_ROOT, 'sites', siteId, 'config', 'php.ini');
-    
+
     if (fs.existsSync(customIniPath)) {
       try {
         let iniContent = fs.readFileSync(customIniPath, 'utf8');
         if (!iniContent.includes('extension=mysqli')) {
           const localExtDir = path.join(PHP_DIR, 'ext').replace(/\\/g, '/');
-          const extDirSetting = fs.existsSync(localExtDir) ? `extension_dir = "${localExtDir}"\r\n` : `extension_dir = "ext"\r\n`;
-          iniContent = `[PHP]\r\n${extDirSetting}extension=mysqli\r\nextension=pdo_mysql\r\nextension=curl\r\nextension=mbstring\r\nextension=openssl\r\nextension=fileinfo\r\nextension=gd\r\nextension=zip\r\n\r\n` + iniContent;
+          const extDirSetting = fs.existsSync(localExtDir)
+            ? `extension_dir = "${localExtDir}"\r\n`
+            : `extension_dir = "ext"\r\n`;
+          iniContent =
+            `[PHP]\r\n${extDirSetting}extension=mysqli\r\nextension=pdo_mysql\r\nextension=curl\r\nextension=mbstring\r\nextension=openssl\r\nextension=fileinfo\r\nextension=gd\r\nextension=zip\r\n\r\n` +
+            iniContent;
           fs.writeFileSync(customIniPath, iniContent, 'utf8');
         }
       } catch (iniErr) {
@@ -625,9 +628,11 @@ if (file_exists($root . '/index.php')) {
       logger.error(`Failed generating php-router.php: ${err.message}`);
     }
 
-    this.ensureMariaDBRuntime().catch((e) => {
+    try {
+      await this.ensureMariaDBRuntime();
+    } catch (e: any) {
       logger.error(`Failed ensuring MariaDB: ${e.message}`);
-    });
+    }
 
     this.ensurePMARuntime().catch((e) => {
       logger.error(`Failed ensuring phpMyAdmin: ${e.message}`);

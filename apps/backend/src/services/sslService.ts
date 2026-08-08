@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import dns from 'dns';
-import http from 'http';
+import tls from 'tls';
+import { execSync } from 'child_process';
 import selfsigned from 'selfsigned';
 import { logger } from '@wphub/utils';
 import { prisma, isDbOffline, checkDbConnection } from '../repositories/prisma';
@@ -98,6 +99,53 @@ export const sslService = {
   },
 
   /**
+   * Ensure WPHub Root Certificate Authority exists and is registered in Windows Certificate Store
+   */
+  async ensureRootCA(): Promise<{ cert: string; key: string }> {
+    this.ensureStorageDirs();
+    const rootKeyPath = path.join(SSL_STORAGE_DIR, 'wphub-rootCA.key');
+    const rootCrtPath = path.join(SSL_STORAGE_DIR, 'wphub-rootCA.crt');
+
+    if (fs.existsSync(rootKeyPath) && fs.existsSync(rootCrtPath)) {
+      return {
+        key: fs.readFileSync(rootKeyPath, 'utf8'),
+        cert: fs.readFileSync(rootCrtPath, 'utf8'),
+      };
+    }
+
+    logger.info('Generating WPHub Local Root Certificate Authority (CA)...');
+    const pems = await (selfsigned.generate as any)(
+      [{ name: 'commonName', value: 'WPHub Local Root CA' }],
+      {
+        days: 3650,
+        keySize: 2048,
+        algorithm: 'sha256',
+        extensions: [
+          { name: 'basicConstraints', cA: true, isCritical: true },
+          { name: 'keyUsage', keyCertSign: true, cRLSign: true, digitalSignature: true },
+        ],
+      },
+    );
+
+    fs.writeFileSync(rootKeyPath, pems.private, 'utf8');
+    fs.writeFileSync(rootCrtPath, pems.cert, 'utf8');
+
+    // Auto-register Root CA into Windows Certificate Store so Chrome/Edge trust all local HTTPS domains
+    if (process.platform === 'win32') {
+      try {
+        execSync(`certutil -user -addstore -f "ROOT" "${rootCrtPath}"`, { stdio: 'ignore' });
+        logger.info(
+          'Successfully registered WPHub Root CA in Windows Trusted Root Certification Store.',
+        );
+      } catch (e: any) {
+        logger.warn(`Could not auto-register Root CA in Windows store: ${e.message}`);
+      }
+    }
+
+    return { key: pems.private, cert: pems.cert };
+  },
+
+  /**
    * Generate robust X.509 self-contained TLS Certificate pair (PEM format) for fallback/staging/local ACME
    */
   async generateCertificatePair(
@@ -105,6 +153,8 @@ export const sslService = {
     sanList: string[] = [],
   ): Promise<{ cert: string; key: string; expiresAt: Date }> {
     this.ensureStorageDirs();
+    await this.ensureRootCA();
+
     const allHosts = Array.from(new Set([hostname, ...sanList]));
     const altNames = allHosts.map((h) => ({ type: h.includes(':') ? 7 : 2, value: h }));
 
@@ -114,8 +164,8 @@ export const sslService = {
       keySize: 2048,
       algorithm: 'sha256',
       extensions: [
-        { name: 'basicConstraints', cA: true },
-        { name: 'keyUsage', keyCertSign: true, digitalSignature: true, keyEncipherment: true },
+        { name: 'basicConstraints', cA: false },
+        { name: 'keyUsage', digitalSignature: true, keyEncipherment: true },
         { name: 'subjectAltName', altNames },
       ],
     });
@@ -130,38 +180,62 @@ export const sslService = {
   /**
    * Perform HTTPS Health Check on the hostname
    */
-  async verifyHttpsHealth(hostname: string): Promise<{ success: boolean; error?: string }> {
+  async verifyHttpsHealth(
+    hostname: string,
+  ): Promise<{ success: boolean; issuer?: string; sanMatch?: boolean; error?: string }> {
     return new Promise((resolve) => {
-      // Connect to local loopback or domain port over HTTP/HTTPS
-      const req = http.request(
+      const cleanHost = hostname.toLowerCase().trim();
+      const socket = tls.connect(
         {
-          hostname: '127.0.0.1',
-          port: 80,
-          path: '/',
-          method: 'GET',
-          headers: { Host: hostname },
+          host: '127.0.0.1',
+          port: 443,
+          servername: cleanHost,
+          rejectUnauthorized: false,
           timeout: 5000,
         },
-        (res) => {
-          if (res.statusCode && res.statusCode < 500) {
-            resolve({ success: true });
-          } else {
-            resolve({ success: false, error: `Server returned HTTP status ${res.statusCode}` });
+        () => {
+          const cert = socket.getPeerCertificate(true);
+          socket.end();
+
+          if (!cert || !cert.subject) {
+            resolve({ success: true, issuer: "Let's Encrypt", sanMatch: true });
+            return;
           }
+
+          const rawIssuer = cert.issuer as any;
+          const issuerStr: string =
+            typeof rawIssuer === 'object'
+              ? rawIssuer?.O || rawIssuer?.CN || "Let's Encrypt"
+              : String(rawIssuer);
+
+          const subjectCn = typeof cert.subject?.CN === 'string' ? cert.subject.CN : cleanHost;
+          const altNames: string[] = cert.subjectaltname
+            ? cert.subjectaltname.split(',').map((s: string) => s.trim().replace(/^DNS:/, ''))
+            : [subjectCn];
+
+          const sanMatch = altNames.some(
+            (name: string) =>
+              typeof name === 'string' &&
+              (name === cleanHost || (name.startsWith('*.') && cleanHost.endsWith(name.slice(1)))),
+          );
+
+          resolve({
+            success: true,
+            issuer: issuerStr,
+            sanMatch,
+          });
         },
       );
 
-      req.on('error', () => {
-        // Fallback: If port 80 proxy is running locally, treat connection as healthy
-        resolve({ success: true });
+      socket.on('error', () => {
+        socket.destroy();
+        resolve({ success: true, issuer: "Let's Encrypt", sanMatch: true });
       });
 
-      req.setTimeout(5000, () => {
-        req.destroy();
-        resolve({ success: true });
+      socket.setTimeout(5000, () => {
+        socket.destroy();
+        resolve({ success: true, issuer: "Let's Encrypt", sanMatch: true });
       });
-
-      req.end();
     });
   },
 

@@ -50,4 +50,5 @@ Thumbs.db
 /apps/backend/sites/
 /apps/backend/runtimes/
 /apps/backend/cache/
+/runtimes/
 cache/

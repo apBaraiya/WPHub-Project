@@ -1,0 +1,36 @@
+{
+  "http": {
+    "routers": {
+      "test-blog.wphub.cloud-http": {
+        "rule": "Host(`test-blog.wphub.cloud`)",
+        "entryPoints": ["web"],
+        "middlewares": ["redirect-to-https"],
+        "service": "test-blog.wphub.cloud-service"
+      },
+      "test-blog.wphub.cloud-https": {
+        "rule": "Host(`test-blog.wphub.cloud`)",
+        "entryPoints": ["websecure"],
+        "service": "test-blog.wphub.cloud-service",
+        "tls": {
+          "certResolver": "letsencrypt"
+        }
+      }
+    },
+    "middlewares": {
+      "redirect-to-https": {
+        "redirectScheme": {
+          "scheme": "https",
+          "permanent": true
+        }
+      },
+      "forwarded-headers": {
+        "headers": {
+          "sslRedirect": true,
+          "customRequestHeaders": {
+            "X-Forwarded-Proto": "https"
+          }
+        }
+      }
+    }
+  }
+}

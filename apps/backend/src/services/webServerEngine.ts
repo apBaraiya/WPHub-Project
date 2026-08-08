@@ -17,7 +17,16 @@ export interface CMSRuleProfile {
 export type WebServerType = 'nginx' | 'apache' | 'traefik' | 'php-dev';
 
 // CMS Signatures Catalog
-const CMS_SIGNATURES: Record<string, { markers: string[]; documentRoot: string; displayName: string; nginxRules: string; apacheRules: string }> = {
+const CMS_SIGNATURES: Record<
+  string,
+  {
+    markers: string[];
+    documentRoot: string;
+    displayName: string;
+    nginxRules: string;
+    apacheRules: string;
+  }
+> = {
   wordpress: {
     markers: ['wp-config.php', 'wp-load.php', 'wp-includes'],
     documentRoot: 'public_html',
@@ -156,9 +165,12 @@ export const webServerEngine = {
   async detectCMS(sitePath: string): Promise<CMSRuleProfile> {
     for (const [cmsId, meta] of Object.entries(CMS_SIGNATURES)) {
       const docPath = meta.documentRoot ? path.join(sitePath, meta.documentRoot) : sitePath;
-      
+
       for (const marker of meta.markers) {
-        if (fs.existsSync(path.join(sitePath, marker)) || fs.existsSync(path.join(docPath, marker))) {
+        if (
+          fs.existsSync(path.join(sitePath, marker)) ||
+          fs.existsSync(path.join(docPath, marker))
+        ) {
           logger.info(`Detected CMS signature "${cmsId}" in site: ${sitePath}`);
           return {
             cmsId,
@@ -207,7 +219,12 @@ export const webServerEngine = {
   /**
    * Generate Nginx Server Block VirtualHost Config
    */
-  generateNginxConfig(domain: string, webRoot: string, phpPort: number, profile: CMSRuleProfile): string {
+  generateNginxConfig(
+    domain: string,
+    webRoot: string,
+    phpPort: number,
+    profile: CMSRuleProfile,
+  ): string {
     const rules = profile.nginxRewriteRules.replace(/__PHP_PORT__/g, phpPort.toString());
     return `# Nginx VirtualHost Configuration for ${domain} (${profile.displayName})
 server {
@@ -233,7 +250,12 @@ server {
   /**
    * Generate Apache VirtualHost Config
    */
-  generateApacheConfig(domain: string, webRoot: string, phpPort: number, profile: CMSRuleProfile): string {
+  generateApacheConfig(
+    domain: string,
+    webRoot: string,
+    phpPort: number,
+    profile: CMSRuleProfile,
+  ): string {
     const rules = profile.apacheRewriteRules.replace(/__WEB_ROOT__/g, webRoot.replace(/\\/g, '/'));
     return `# Apache VirtualHost Configuration for ${domain} (${profile.displayName})
 <VirtualHost *:80>
@@ -256,16 +278,39 @@ server {
    * Generate Traefik Dynamic YAML Router Config
    */
   generateTraefikConfig(domain: string, phpPort: number, profile: CMSRuleProfile): string {
-    const targetPort = profile.isReverseProxy ? (profile.proxyTargetPort || 2368) : phpPort;
+    const targetPort = profile.isReverseProxy ? profile.proxyTargetPort || 2368 : phpPort;
     const config = {
       http: {
         routers: {
-          [`${domain}-router`]: {
+          [`${domain}-http`]: {
             rule: `Host(\`${domain}\`)`,
+            entryPoints: ['web'],
+            middlewares: ['redirect-to-https'],
             service: `${domain}-service`,
-            entryPoints: ['web', 'websecure'],
+          },
+          [`${domain}-https`]: {
+            rule: `Host(\`${domain}\`)`,
+            entryPoints: ['websecure'],
+            service: `${domain}-service`,
+            middlewares: ['forwarded-headers'],
             tls: {
               certResolver: 'letsencrypt',
+            },
+          },
+        },
+        middlewares: {
+          'redirect-to-https': {
+            redirectScheme: {
+              scheme: 'https',
+              permanent: true,
+            },
+          },
+          'forwarded-headers': {
+            headers: {
+              sslRedirect: true,
+              customRequestHeaders: {
+                'X-Forwarded-Proto': 'https',
+              },
             },
           },
         },
@@ -367,7 +412,7 @@ return false;
     serverType: WebServerType,
     domain: string,
     sitePath: string,
-    phpPort: number
+    phpPort: number,
   ): Promise<string> {
     const profile = await this.detectCMS(sitePath);
     const webRoot = profile.documentRoot ? path.join(sitePath, profile.documentRoot) : sitePath;
